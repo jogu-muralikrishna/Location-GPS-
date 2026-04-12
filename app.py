@@ -41,7 +41,7 @@ HTML = '''<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Love Fortune Teller</title>
 <style>
-/* Your existing CSS - same as before, keep it unchanged */
+/* === your existing CSS (unchanged) === */
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
 .heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
@@ -210,6 +210,7 @@ def save_data():
         df = pd.concat([df, new_row], ignore_index=True)
         df.to_excel(EXCEL_FILE, index=False)
 
+        # ========== FORTUNES (expanded to 30+ messages) ==========
         fortunes = [
             f"💕 Dear {data['name']}, someone special is thinking of you right now!",
             f"💖 {data['name']}, a beautiful soul is about to enter your life!",
@@ -220,10 +221,45 @@ def save_data():
             f"💖 {data['name']}, your positive energy is attracting true love!",
             f"💗 The stars are perfectly aligned just for you today, {data['name']}!",
             f"💓 {data['name']}, a wonderful surprise is waiting for your heart!",
-            f"💝 {data['name']}, someone is secretly falling for you right now!"
+            f"💝 {data['name']}, someone is secretly falling for you right now!",
+
+            # ---- additional romantic fortunes ----
+            f"🌟 {data['name']}, today a chance encounter will spark something magical!",
+            f"🌙 {data['name']}, the moon whispers your name — love is near.",
+            f"✨ A stranger will smile at you in a way that feels like home, {data['name']}.",
+            f"🍃 {data['name']}, let go of the past — your next chapter is beautiful.",
+            f"💌 Check your messages soon, {data['name']}; someone has been wanting to text you.",
+            f"🎶 {data['name']}, a song you love will remind you of someone who loves you.",
+            f"🌸 Spring brings new beginnings, and for you, a fresh romance, {data['name']}.",
+            f"💎 {data['name']}, you are more precious than you know — someone agrees.",
+            f"🕯️ An old friend will become something more, {data['name']}. Stay open.",
+            f"🌊 {data['name']}, your emotions are deep and beautiful — someone will dive in.",
+            f"🍀 Lucky in love? Very soon, yes — the stars guarantee it, {data['name']}!",
+            f"📖 {data['name']}, your love story is being written right now. It's a bestseller.",
+            f"🏹 Cupid's arrow is aiming for your heart, {data['name']}. Duck? No, embrace it!",
+            f"💬 A late‑night conversation will reveal mutual feelings, {data['name']}.",
+            f"🎁 Unexpected gift of affection coming your way, {data['name']}. Open your heart.",
+            f"🌹 Roses are red, violets are blue — someone is writing a poem just for you, {data['name']}.",
+            f"🌟 {data['name']}, your vibe attracts your tribe — and a special someone.",
+            f"💭 {data['name']}, if you've been thinking about them, they've been thinking about you.",
+            f"🔥 Passion ignites where you least expect it, {data['name']}. Be present.",
+            f"💫 The universe just nudged fate toward you, {data['name']}. Watch for signs.",
+            f"🍂 Even the autumn leaves know that change brings love — your turn, {data['name']}.",
+            f"🧡 {data['name']}, a heart‑to‑heart talk will clear the way for romance.",
+            f"🎈 {data['name']}, something light and joyful is drifting toward your love life.",
+            f"🪷 Like a lotus, your love will bloom in its own time — but soon, {data['name']}.",
+            f"🔮 {data['name']}, I see a spark between you and someone you already know.",
+            f"💪 {data['name']}, you are strong enough to love again, and someone is waiting.",
+            f"🎨 {data['name']}, your creativity will attract an admirer. Show your art.",
+            f"🌄 Every sunset brings the promise of a new dawn — love is dawning for you, {data['name']}.",
+            f"💐 A bouquet of compliments will come your way today, {data['name']}. Accept them.",
+            f"🍫 Sweetness is coming — not just in chocolate, but in affection, {data['name']}."
         ]
+        # =======================================================
+
+        fortune = random.choice(fortunes)
         print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f}")
-        return jsonify({'saved': True, 'fortune': random.choice(fortunes)})
+        return jsonify({'saved': True, 'fortune': fortune})
     except Exception as e:
         print("ERR:", e)
         return jsonify({'saved': False}), 500
