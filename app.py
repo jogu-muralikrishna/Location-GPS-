@@ -13,7 +13,7 @@ CORS(app)
 # PERMANENT STORAGE
 EXCEL_FILE = 'fortunes_data.xlsx'
 BACKUP_FILE = 'fortunes_data_backup.xlsx'
-ADMIN_PASSWORD = 'murali143'
+ADMIN_PASSWORD = 'admin123'
 
 def ensure_persistent_storage():
     if not os.path.exists(EXCEL_FILE):
