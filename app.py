@@ -179,7 +179,7 @@ def index():
             padding: 20px;
             margin: 20px 0;
             font-size: 1.3em;
-            font-weight: 500;
+            font-weight: bold;          /* <--- fortune text in bold, normal font */
             color: #c06c84;
             line-height: 1.4;
         }
@@ -316,7 +316,7 @@ def index():
                 document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
                 
-                // Show SMS prompt (to collect phone number)
+                // Show SMS prompt
                 document.getElementById('smsSection').classList.remove('hidden');
             }, () => {
                 showStatus('⚠️ Location denied. Random fortune below.', true);
@@ -348,14 +348,12 @@ def index():
             showStatus('Please enter your mobile number', true, 'smsStatus');
             return;
         }
-        // Basic validation (allow + and digits)
         if (!/^\+?[0-9\s\-]{10,15}$/.test(phone)) {
             showStatus('Invalid phone number format', true, 'smsStatus');
             return;
         }
         showStatus('Sending your fortune...', false, 'smsStatus');
         
-        // Send phone number to server (update the existing record or add to same row)
         const resp = await fetch('/save-phone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -489,7 +487,7 @@ def admin():
     html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
     for _, row in df.iterrows():
         html += "<tr>" + "".join(f"<td>{str(val)[:80]}</td>" for val in row) + "</tr>"
-    html += "<tr><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
+    html += "</table><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
     return html
 
 @app.route('/download-excel')
