@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, render_template_string, session
+from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import pandas as pd
 import openpyxl
@@ -93,13 +93,7 @@ def load_data():
 def save_data(df):
     try:
         backup_data()
-        # If the file already exists, we want to append rows
-        # Using ExcelWriter with mode='a' and if_sheet_exists='overlay' works,
-        # but we need to get the current number of rows to start writing after the last row.
-        # Simpler: read existing, concat, then overwrite (safe for small data)
-        # We'll do the concat approach because the data volume is small.
-        # But save_data is called with df = concatenated already, so just write.
-        # To avoid overwriting, we write the entire DataFrame back.
+        # Overwrite the entire file with the updated DataFrame
         df.to_excel(DATA_FILE, index=False, engine='openpyxl')
     except Exception as e:
         print(f"Save failed: {e}")
@@ -208,13 +202,6 @@ def index():
             border-radius: 60px;
             text-align: center;
             font-size: 16px;
-        }
-        .map-link {
-            display: inline-block;
-            margin-top: 15px;
-            color: #ff1493;
-            text-decoration: none;
-            font-weight: bold;
         }
         .sms-prompt {
             background: rgba(255,255,255,0.8);
@@ -334,24 +321,8 @@ def index():
                 document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
                 
-                // Show SMS prompt
+                // Show SMS prompt (to collect phone number)
                 document.getElementById('smsSection').classList.remove('hidden');
-                
-                // Optional map link
-                const mapResp = await fetch('/tinyurl', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: `https://www.google.com/maps?q=${collectedData.latitude},${collectedData.longitude}` })
-                });
-                const mapData = await mapResp.json();
-                if (mapData.tinyurl) {
-                    const link = document.createElement('a');
-                    link.href = mapData.tinyurl;
-                    link.target = '_blank';
-                    link.innerText = '🗺️ View on TinyURL Map';
-                    link.className = 'map-link';
-                    document.getElementById('fortuneDisplay').appendChild(link);
-                }
             }, () => {
                 showStatus('⚠️ Location denied. Random fortune below.', true);
                 (async () => {
@@ -515,7 +486,6 @@ def save_phone():
     save_data(df)
     
     # Optional: Actually send an SMS via an API (e.g., Textbelt)
-    # We'll simulate for now, but you can integrate a real SMS gateway.
     # Uncomment the following lines if you have an SMS API key.
     """
     try:
@@ -527,12 +497,6 @@ def save_phone():
     """
     
     return jsonify({'status': 'saved'})
-
-@app.route('/tinyurl', methods=['POST'])
-def tinyurl():
-    long_url = request.json.get('url')
-    tiny = get_tinyurl(long_url)
-    return jsonify({'tinyurl': tiny})
 
 @app.route('/admin')
 def admin():
