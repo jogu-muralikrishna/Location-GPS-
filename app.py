@@ -368,7 +368,7 @@ HTML_TEMPLATE = """
             return;
         }
         await collectBaseData({ name: name });
-        # showStatus('🌍 Getting your location for an accurate fortune...');
+        showStatus('🌍 Getting your location for an accurate fortune...');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(async (pos) => {
