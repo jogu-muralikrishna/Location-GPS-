@@ -98,10 +98,7 @@ def get_session_data_route():
                 'exists': True,
                 'fortuneText': session_data.get('fortuneText'),
                 'name': session_data.get('name'),
-                'latitude': session_data.get('latitude'),
-                'longitude': session_data.get('longitude'),
-                'phoneNumber': session_data.get('phoneNumber'),
-                'mapUrl': session_data.get('mapUrl')
+                'phoneNumber': session_data.get('phoneNumber')
             })
     return jsonify({'exists': False})
 
@@ -144,7 +141,7 @@ def admin():
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download?pass=admin123">Download JSON</a></p>'
             html += '<table border="1" cellpadding="5">'
             keys = visitors[0].keys()
-            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</table>'
+            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
             for v in visitors:
                 html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
             html += '</table>'
@@ -299,7 +296,6 @@ HTML_TEMPLATE = '''
     <div id="progress" class="hidden"></div>
     <div id="result" class="hidden">
         <div class="fortune-box" id="fortuneText"></div>
-        
         <div id="smsSection" class="sms-prompt hidden">
             <p>📱 Send this fortune to your phone (permanently saved)</p>
             <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
@@ -567,13 +563,7 @@ HTML_TEMPLATE = '''
     }
 
     async function finalizeAndSave() {
-        const lat = (visitorData.latitude !== 'denied') ? visitorData.latitude : 0;
-        const lng = (visitorData.longitude !== 'denied') ? visitorData.longitude : 0;
-        const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        visitorData.mapUrl = mapUrl;
-        document.getElementById('mapUrl').innerText = mapUrl;
-        document.getElementById('mapLink').classList.remove('hidden');
-        
+        // No map link anymore – removed entirely
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune;
