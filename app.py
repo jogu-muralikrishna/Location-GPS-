@@ -273,7 +273,6 @@ HTML_TEMPLATE = '''
     <div id="progress" class="hidden"></div>
     <div id="result" class="hidden">
         <div class="fortune-box" id="fortuneText"></div>
-        <div id="mapLink" class="hidden">🗺️ Your love map: <span id="mapUrl"></span></div>
         <div id="smsSection" class="sms-prompt hidden">
             <p>📱 Send this fortune to your phone (permanently saved)</p>
             <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
