@@ -1,11 +1,10 @@
-from flask import Flask, request, jsonify, render_template_string, session
+from flask import Flask, request, jsonify, render_template_string
 import json
 import os
 import random
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here-change-it'
 
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
@@ -78,30 +77,39 @@ def save():
     save_visitor(data)
     return jsonify({'status': 'saved'})
 
-# Admin login and dashboard
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
+    # If POST request with correct password, show data
     if request.method == 'POST':
         password = request.form.get('password')
         if password == 'admin123':
-            session['admin_logged_in'] = True
-            return render_admin_table()
+            visitors = get_visitors()
+            if not visitors:
+                return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
+            # Build HTML table
+            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download">Download JSON</a></p>'
+            html += '<table border="1" cellpadding="5">'
+            keys = visitors[0].keys()
+            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
+            for v in visitors:
+                html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
+            html += '</table>'
+            return html
         else:
-            return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>', 403
+            return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
     
-    # Show login form if not logged in
-    if session.get('admin_logged_in'):
-        return render_admin_table()
-    
+    # GET request: show login form
     return '''
         <!DOCTYPE html>
         <html>
-        <head><title>Admin Login</title><style>
+        <head><title>Admin Login</title>
+        <style>
             body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
             .login-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.1); text-align: center; }
             input { padding: 10px; margin: 10px; width: 200px; border-radius: 10px; border: 1px solid #ccc; }
             button { padding: 10px 20px; background: #ff6b6b; color: white; border: none; border-radius: 10px; cursor: pointer; }
-        </style></head>
+        </style>
+        </head>
         <body>
             <div class="login-box">
                 <h2>🔐 Admin Login</h2>
@@ -114,29 +122,13 @@ def admin():
         </html>
     '''
 
-def render_admin_table():
-    visitors = get_visitors()
-    if not visitors:
-        return '<h1>No data yet</h1><p><a href="/admin/logout">Logout</a></p>'
-    html = '<h1>💕 Visitor Data</h1><p><a href="/admin/logout">Logout</a> | <a href="/admin/download">Download JSON</a></p>'
-    html += '<table border="1" cellpadding="5">'
-    keys = visitors[0].keys()
-    html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
-    for v in visitors:
-        html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
-    html += '</table>'
-    return html
-
-@app.route('/admin/logout')
-def admin_logout():
-    session.pop('admin_logged_in', None)
-    return '<h1>Logged out. <a href="/admin">Login again</a></h1>'
-
 @app.route('/admin/download')
 def download():
-    if not session.get('admin_logged_in'):
-        return 'Unauthorized. <a href="/admin">Login</a>', 403
-    return jsonify(get_visitors())
+    # Simple check via query parameter for convenience (optional)
+    pwd = request.args.get('pass')
+    if pwd == 'admin123':
+        return jsonify(get_visitors())
+    return 'Unauthorized. Use /admin?pass=admin123 or login via /admin', 403
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
