@@ -563,7 +563,7 @@ HTML_TEMPLATE = '''
     }
 
     async function finalizeAndSave() {
-        // No map link anymore – removed entirely
+        // No map link – location data is still saved but not shown
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune;
