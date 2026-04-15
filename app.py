@@ -623,8 +623,8 @@ HTML_TEMPLATE = '''
         }
         
         sendBtn.disabled = true;
-        sendBtn.innerText = '💫 Saving...';
-        statusDiv.innerText = 'Saving your number...';
+        sendBtn.innerText = '💫 Sending...';
+        statusDiv.innerText = 'Sending to your number...';
         
         try {
             const resp = await fetch('/save-phone', {
