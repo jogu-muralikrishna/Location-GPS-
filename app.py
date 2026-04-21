@@ -1,11 +1,11 @@
-from flask import Flask, request, jsonify, render_template_string, Response
+from flask import Flask, request, jsonify, render_template_string, Response, send_from_directory
 from supabase import create_client, Client
 import os
 import random
 import sys
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
 # ---------- Safe Supabase Setup ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -19,7 +19,7 @@ else:
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
 
-# ---------- Helper Functions ----------
+# ---------- Helper Functions (unchanged) ----------
 def save_visitor(data):
     if supabase is None:
         return
@@ -100,14 +100,11 @@ def get_love_message(name1, name2, percentage):
 # ---------- Flask Routes ----------
 @app.route('/')
 def index():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    html_path = os.path.join(base_dir, 'static', 'index.html')
+    # Serve the index.html from the static folder
     try:
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        return render_template_string(html_content)
+        return send_from_directory('static', 'index.html')
     except Exception as e:
-        return f"<h1>Error loading index.html</h1><p>{str(e)}</p>", 500
+        return f"<h1>Error loading index.html</h1><p>{str(e)}</p><p>Make sure static/index.html exists.</p>", 500
 
 @app.route('/get-session-data', methods=['POST'])
 def get_session_data_route():
