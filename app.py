@@ -7,7 +7,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- Safe Supabase Setup ----------
+# ---------- Supabase Setup ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
@@ -692,7 +692,7 @@ def admin():
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
                 html += '</tr>'
-            html += '</tr></div>'
+            html += '</table></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
             for v in visitors:
@@ -724,7 +724,7 @@ def admin():
 
 
 '
-                    html += '</table>'
+                    html += '<tr>'
             return html
         else:
             return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
