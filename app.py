@@ -7,8 +7,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ---------- Supabase Setup ----------
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = os.environ.get("https://chqhoofykvztgjdxiled.supabase.co/rest/v1/L")
+SUPABASE_KEY = os.environ.get("sb_secret_peryClbKZVbaBtQOK5ckWA_o-NpeDeF")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
