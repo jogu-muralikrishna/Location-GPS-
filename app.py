@@ -100,7 +100,7 @@ def get_love_message(name1, name2, percentage):
 # ---------- Flask Routes ----------
 @app.route('/')
 def index():
-    # Read the HTML file from the same directory as this script
+    # Read the HTML file (it will be included in the Vercel deployment)
     base_dir = os.path.dirname(os.path.abspath(__file__))
     html_path = os.path.join(base_dir, 'index.html')
     try:
@@ -190,7 +190,7 @@ def admin():
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
                 html += '</tr>'
-            html += '<table></div>'
+            html += '</table></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
             for v in visitors:
@@ -260,6 +260,5 @@ def calculate_love():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+# Vercel requires the app to be exposed as 'app'
+# This is already the case (app = Flask(__name__))
