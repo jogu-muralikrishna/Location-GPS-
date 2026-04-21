@@ -692,7 +692,7 @@ def admin():
                         display_val = str(val)[:500]
                     html += f'<td style="padding:8px; font-size:12px;">{display_val}</td>'
                 html += '</tr>'
-            html += '</table></div>'
+            html += '</tr></div>'
 
             html += '<hr><h2>📍 Live Location History (movement tracking)</h2>'
             for v in visitors:
