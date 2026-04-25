@@ -18,106 +18,88 @@ def calculate_love_percentage(name1, name2):
 
 def get_love_message(name1, name2, percentage):
     messages = [
-        💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!
-✨ {name1} and {name2} share {percentage}% destiny written in the stars!
-💖 {name1} + {name2} = {percentage}% endless affection!
-🌹 {name1} and {name2} bloom together with {percentage}% love!
-💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!
-💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!
-✨ {name1} & {name2} – {percentage}% magical bond!
-💖 {name1} and {name2} share {percentage}% sweet harmony!
-🌹 Love between {name1} and {name2} is {percentage}% pure bliss!
-💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!
-
-💕 {name1} and {name2} – {percentage}% love that never fades!
-✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!
-💖 {name1} + {name2} = {percentage}% perfect chemistry!
-🌹 {name1} and {name2} share {percentage}% romantic energy!
-💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!
-
-💕 {name1} and {name2} glow with {percentage}% love light!
-✨ {name1} ❤️ {name2} – {percentage}% forever feeling!
-💖 {name1} + {name2} = {percentage}% heart connection!
-🌹 {name1} and {name2} share {percentage}% sweet romance!
-💫 {name1} ❤️ {name2} – {percentage}% love harmony!
-
-💕 {name1} and {name2} – {percentage}% true love vibes!
-✨ {name1} ❤️ {name2} – {percentage}% perfect match!
-💖 {name1} + {name2} = {percentage}% love magic!
-🌹 {name1} and {name2} share {percentage}% endless charm!
-💫 {name1} ❤️ {name2} – {percentage}% romantic spark!
-
-💕 {name1} and {name2} – {percentage}% heartwarming bond!
-✨ {name1} ❤️ {name2} – {percentage}% destiny love!
-💖 {name1} + {name2} = {percentage}% soulful match!
-🌹 {name1} and {name2} share {percentage}% deep affection!
-💫 {name1} ❤️ {name2} – {percentage}% love glow!
-
-💕 {name1} and {name2} – {percentage}% charming connection!
-✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!
-💖 {name1} + {name2} = {percentage}% emotional magic!
-🌹 {name1} and {name2} share {percentage}% tender love!
-💫 {name1} ❤️ {name2} – {percentage}% loving bond!
-
-💕 {name1} and {name2} – {percentage}% golden romance!
-✨ {name1} ❤️ {name2} – {percentage}% heart glow!
-💖 {name1} + {name2} = {percentage}% pure affection!
-🌹 {name1} and {name2} share {percentage}% love rhythm!
-💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!
-
-💕 {name1} and {name2} – {percentage}% love spark!
-✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!
-💖 {name1} + {name2} = {percentage}% love glow!
-🌹 {name1} and {name2} share {percentage}% romance charm!
-💫 {name1} ❤️ {name2} – {percentage}% heart magic!
-
-💕 {name1} and {name2} – {percentage}% soft love vibes!
-✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!
-💖 {name1} + {name2} = {percentage}% love warmth!
-🌹 {name1} and {name2} share {percentage}% gentle romance!
-💫 {name1} ❤️ {name2} – {percentage}% sweet spark!
-
-💕 {name1} and {name2} – {percentage}% romantic glow!
-✨ {name1} ❤️ {name2} – {percentage}% magical hearts!
-💖 {name1} + {name2} = {percentage}% love energy!
-🌹 {name1} and {name2} share {percentage}% passion!
-💫 {name1} ❤️ {name2} – {percentage}% love charm!
-
-💕 {name1} and {name2} – {percentage}% sweet connection!
-✨ {name1} ❤️ {name2} – {percentage}% heart link!
-💖 {name1} + {name2} = {percentage}% loving vibes!
-🌹 {name1} and {name2} share {percentage}% affection!
-💫 {name1} ❤️ {name2} – {percentage}% dreamy match!
-
-💕 {name1} and {name2} – {percentage}% warm romance!
-✨ {name1} ❤️ {name2} – {percentage}% loving destiny!
-💖 {name1} + {name2} = {percentage}% magical bond!
-🌹 {name1} and {name2} share {percentage}% heart charm!
-💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!
-
-💕 {name1} and {name2} – {percentage}% forever love!
-✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!
-💖 {name1} + {name2} = {percentage}% love rhythm!
-🌹 {name1} and {name2} share {percentage}% dreamy vibes!
-💫 {name1} ❤️ {name2} – {percentage}% magical story!
+        f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
+        f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
+        f"💖 {name1} + {name2} = {percentage}% endless affection!",
+        f"🌹 {name1} and {name2} bloom together with {percentage}% love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!",
+        f"💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!",
+        f"✨ {name1} & {name2} – {percentage}% magical bond!",
+        f"💖 {name1} and {name2} share {percentage}% sweet harmony!",
+        f"🌹 Love between {name1} and {name2} is {percentage}% pure bliss!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!",
+        f"💕 {name1} and {name2} – {percentage}% love that never fades!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!",
+        f"💖 {name1} + {name2} = {percentage}% perfect chemistry!",
+        f"🌹 {name1} and {name2} share {percentage}% romantic energy!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!",
+        f"💕 {name1} and {name2} glow with {percentage}% love light!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% forever feeling!",
+        f"💖 {name1} + {name2} = {percentage}% heart connection!",
+        f"🌹 {name1} and {name2} share {percentage}% sweet romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love harmony!",
+        f"💕 {name1} and {name2} – {percentage}% true love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% perfect match!",
+        f"💖 {name1} + {name2} = {percentage}% love magic!",
+        f"🌹 {name1} and {name2} share {percentage}% endless charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% romantic spark!",
+        f"💕 {name1} and {name2} – {percentage}% heartwarming bond!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% destiny love!",
+        f"💖 {name1} + {name2} = {percentage}% soulful match!",
+        f"🌹 {name1} and {name2} share {percentage}% deep affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love glow!",
+        f"💕 {name1} and {name2} – {percentage}% charming connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!",
+        f"💖 {name1} + {name2} = {percentage}% emotional magic!",
+        f"🌹 {name1} and {name2} share {percentage}% tender love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% loving bond!",
+        f"💕 {name1} and {name2} – {percentage}% golden romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart glow!",
+        f"💖 {name1} + {name2} = {percentage}% pure affection!",
+        f"🌹 {name1} and {name2} share {percentage}% love rhythm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!",
+        f"💕 {name1} and {name2} – {percentage}% love spark!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!",
+        f"💖 {name1} + {name2} = {percentage}% love glow!",
+        f"🌹 {name1} and {name2} share {percentage}% romance charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% heart magic!",
+        f"💕 {name1} and {name2} – {percentage}% soft love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!",
+        f"💖 {name1} + {name2} = {percentage}% love warmth!",
+        f"🌹 {name1} and {name2} share {percentage}% gentle romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% sweet spark!",
+        f"💕 {name1} and {name2} – {percentage}% romantic glow!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% magical hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love energy!",
+        f"🌹 {name1} and {name2} share {percentage}% passion!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love charm!",
+        f"💕 {name1} and {name2} – {percentage}% sweet connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart link!",
+        f"💖 {name1} + {name2} = {percentage}% loving vibes!",
+        f"🌹 {name1} and {name2} share {percentage}% affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy match!",
+        f"💕 {name1} and {name2} – {percentage}% warm romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% loving destiny!",
+        f"💖 {name1} + {name2} = {percentage}% magical bond!",
+        f"🌹 {name1} and {name2} share {percentage}% heart charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!",
+        f"💕 {name1} and {name2} – {percentage}% forever love!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love rhythm!",
+        f"🌹 {name1} and {name2} share {percentage}% dreamy vibes!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
     ]
     return random.choice(messages)
 
 # ========== FIXED FIREBASE FUNCTIONS ==========
 def save_to_firebase(path, data):
-    """Save data to Firebase using POST for new entries, PATCH for updates"""
+    """Save data to Firebase using POST for new entries, PUT for updates"""
     try:
-        # Use POST to create a new entry with auto-generated ID
         url = f"{FIREBASE_URL}/{path}.json"
-        
-        # For visitors, we want to use the sessionId as the key
         if "visitors" in path:
-            # This uses PUT to set data at specific path (sessionId)
             response = requests.put(url, json=data, timeout=10)
         else:
-            # For tracking data, use POST to create unique entries
             response = requests.post(url, json=data, timeout=10)
-        
         print(f"Saved to {path}: Status {response.status_code}")
         if response.status_code not in [200, 201]:
             print(f"Error response: {response.text}")
@@ -127,24 +109,10 @@ def save_to_firebase(path, data):
         return False
 
 def save_visitor(session_id, data):
-    """Save visitor data using sessionId as the key"""
     path = f"visitors/{session_id}"
     return save_to_firebase(path, data)
 
-def save_location_tracking(session_id, lat, lon, map_url):
-    """Save each location update as a separate entry"""
-    timestamp = datetime.now().isoformat()
-    location_data = {
-        "sessionId": session_id,
-        "timestamp": timestamp,
-        "latitude": lat,
-        "longitude": lon,
-        "mapUrl": map_url
-    }
-    path = f"tracking_data"
-    return save_to_firebase(path, location_data)
-
-# ========== HTML TEMPLATE ==========
+# ========== HTML TEMPLATE (unchanged) ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -518,7 +486,6 @@ def save_destiny():
         data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
         data['timestamp'] = datetime.now().isoformat()
         
-        # Save to Firebase using sessionId as key
         url = f"{FIREBASE_URL}/visitors/{session_id}.json"
         response = requests.put(url, json=data, timeout=10)
         print(f"Saving to Firebase: {response.status_code}")
@@ -544,7 +511,6 @@ def record_location():
                 "longitude": lon,
                 "mapUrl": map_url
             }
-            # Use POST to create unique entries
             url = f"{FIREBASE_URL}/tracking_data.json"
             response = requests.post(url, json=location_data, timeout=10)
             print(f"Saving location: {response.status_code}")
