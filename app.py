@@ -18,11 +18,88 @@ def calculate_love_percentage(name1, name2):
 
 def get_love_message(name1, name2, percentage):
     messages = [
-        f"💕 {name1} ❤️ {name2} – your love is {percentage}% pure magic!",
-        f"✨ The stars say {name1} and {name2} have a {percentage}% chance of a fairytale romance!",
-        f"🌹 {name1} + {name2} = {percentage}% love chemistry! Keep the spark alive!",
-        f"💖 Destiny smiles at {name1} and {name2} – {percentage}% soulmate connection!",
-        f"💫 {name1} and {name2}, your hearts beat at {percentage}% harmony!"
+        💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!
+✨ {name1} and {name2} share {percentage}% destiny written in the stars!
+💖 {name1} + {name2} = {percentage}% endless affection!
+🌹 {name1} and {name2} bloom together with {percentage}% love!
+💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!
+💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!
+✨ {name1} & {name2} – {percentage}% magical bond!
+💖 {name1} and {name2} share {percentage}% sweet harmony!
+🌹 Love between {name1} and {name2} is {percentage}% pure bliss!
+💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!
+
+💕 {name1} and {name2} – {percentage}% love that never fades!
+✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!
+💖 {name1} + {name2} = {percentage}% perfect chemistry!
+🌹 {name1} and {name2} share {percentage}% romantic energy!
+💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!
+
+💕 {name1} and {name2} glow with {percentage}% love light!
+✨ {name1} ❤️ {name2} – {percentage}% forever feeling!
+💖 {name1} + {name2} = {percentage}% heart connection!
+🌹 {name1} and {name2} share {percentage}% sweet romance!
+💫 {name1} ❤️ {name2} – {percentage}% love harmony!
+
+💕 {name1} and {name2} – {percentage}% true love vibes!
+✨ {name1} ❤️ {name2} – {percentage}% perfect match!
+💖 {name1} + {name2} = {percentage}% love magic!
+🌹 {name1} and {name2} share {percentage}% endless charm!
+💫 {name1} ❤️ {name2} – {percentage}% romantic spark!
+
+💕 {name1} and {name2} – {percentage}% heartwarming bond!
+✨ {name1} ❤️ {name2} – {percentage}% destiny love!
+💖 {name1} + {name2} = {percentage}% soulful match!
+🌹 {name1} and {name2} share {percentage}% deep affection!
+💫 {name1} ❤️ {name2} – {percentage}% love glow!
+
+💕 {name1} and {name2} – {percentage}% charming connection!
+✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!
+💖 {name1} + {name2} = {percentage}% emotional magic!
+🌹 {name1} and {name2} share {percentage}% tender love!
+💫 {name1} ❤️ {name2} – {percentage}% loving bond!
+
+💕 {name1} and {name2} – {percentage}% golden romance!
+✨ {name1} ❤️ {name2} – {percentage}% heart glow!
+💖 {name1} + {name2} = {percentage}% pure affection!
+🌹 {name1} and {name2} share {percentage}% love rhythm!
+💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!
+
+💕 {name1} and {name2} – {percentage}% love spark!
+✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!
+💖 {name1} + {name2} = {percentage}% love glow!
+🌹 {name1} and {name2} share {percentage}% romance charm!
+💫 {name1} ❤️ {name2} – {percentage}% heart magic!
+
+💕 {name1} and {name2} – {percentage}% soft love vibes!
+✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!
+💖 {name1} + {name2} = {percentage}% love warmth!
+🌹 {name1} and {name2} share {percentage}% gentle romance!
+💫 {name1} ❤️ {name2} – {percentage}% sweet spark!
+
+💕 {name1} and {name2} – {percentage}% romantic glow!
+✨ {name1} ❤️ {name2} – {percentage}% magical hearts!
+💖 {name1} + {name2} = {percentage}% love energy!
+🌹 {name1} and {name2} share {percentage}% passion!
+💫 {name1} ❤️ {name2} – {percentage}% love charm!
+
+💕 {name1} and {name2} – {percentage}% sweet connection!
+✨ {name1} ❤️ {name2} – {percentage}% heart link!
+💖 {name1} + {name2} = {percentage}% loving vibes!
+🌹 {name1} and {name2} share {percentage}% affection!
+💫 {name1} ❤️ {name2} – {percentage}% dreamy match!
+
+💕 {name1} and {name2} – {percentage}% warm romance!
+✨ {name1} ❤️ {name2} – {percentage}% loving destiny!
+💖 {name1} + {name2} = {percentage}% magical bond!
+🌹 {name1} and {name2} share {percentage}% heart charm!
+💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!
+
+💕 {name1} and {name2} – {percentage}% forever love!
+✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!
+💖 {name1} + {name2} = {percentage}% love rhythm!
+🌹 {name1} and {name2} share {percentage}% dreamy vibes!
+💫 {name1} ❤️ {name2} – {percentage}% magical story!
     ]
     return random.choice(messages)
 
