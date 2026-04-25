@@ -3,12 +3,23 @@ import os
 import random
 import json
 import requests
+import re
 from datetime import datetime
 
 app = Flask(__name__)
 
 # ========== FIREBASE SETUP ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
+
+def sanitize_key(text):
+    """Replace invalid Firebase key characters with underscore"""
+    return re.sub(r'[.#$\[\]]', '_', text)
+
+def make_visitor_key(name1, name2):
+    """Create a human-readable key from the two names"""
+    n1 = sanitize_key(name1.strip())
+    n2 = sanitize_key(name2.strip())
+    return f"{n1}_{n2}"
 
 # ========== LOVE CALCULATOR FUNCTIONS ==========
 def calculate_love_percentage(name1, name2):
@@ -91,28 +102,34 @@ def get_love_message(name1, name2, percentage):
     ]
     return random.choice(messages)
 
-# ========== FIXED FIREBASE FUNCTIONS ==========
-def save_to_firebase(path, data):
-    """Save data to Firebase using POST for new entries, PUT for updates"""
+# ========== FIREBASE HELPER ==========
+def save_to_firebase(path, data, method='put'):
     try:
         url = f"{FIREBASE_URL}/{path}.json"
-        if "visitors" in path:
+        if method == 'put':
             response = requests.put(url, json=data, timeout=10)
-        else:
+        elif method == 'post':
             response = requests.post(url, json=data, timeout=10)
-        print(f"Saved to {path}: Status {response.status_code}")
-        if response.status_code not in [200, 201]:
-            print(f"Error response: {response.text}")
-        return response.status_code in [200, 201]
+        elif method == 'delete':
+            response = requests.delete(url, timeout=10)
+        else:
+            return False
+        print(f"{method.upper()} {path}: {response.status_code}")
+        return response.status_code in [200, 201, 204]
     except Exception as e:
-        print(f"Firebase save error: {e}")
+        print(f"Firebase error: {e}")
         return False
 
-def save_visitor(session_id, data):
-    path = f"visitors/{session_id}"
-    return save_to_firebase(path, data)
+def move_visitor_data(old_key, new_key, data):
+    """Copy data from old key to new key, then delete old key"""
+    # Save under new key
+    ok = save_to_firebase(f"visitors/{new_key}", data, method='put')
+    if ok:
+        # Delete old key
+        save_to_firebase(f"visitors/{old_key}", None, method='delete')
+    return ok
 
-# ========== HTML TEMPLATE (unchanged) ==========
+# ========== HTML TEMPLATE (unchanged from your last working version) ==========
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -352,13 +369,28 @@ HTML_TEMPLATE = '''
         }
         destinyData.name = name1;
         destinyData.crush_name = name2;
-        fetch('/save-destiny', {
+        
+        // Tell backend to rename the Firebase entry to a human‑readable key
+        fetch('/rename-visitor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(destinyData)
+            body: JSON.stringify({ oldKey: sessionId, name1: name1, name2: name2, data: destinyData })
+        }).then(res => res.json()).then(data => {
+            if (data.newKey) {
+                // Update local sessionId to the new name‑based key
+                sessionId = data.newKey;
+                localStorage.setItem('destiny_session', sessionId);
+                destinyData.sessionId = sessionId;
+                // Continue with the rest of the flow
+                document.getElementById('stepNames').style.display = 'none';
+                document.getElementById('cosmicPanel').style.display = 'block';
+                showMessage('The universe is ready for you ✨', 'info');
+            } else {
+                showMessage('Error renaming session. Please try again.', 'error');
+            }
+        }).catch(() => {
+            showMessage('Network error. Please refresh.', 'error');
         });
-        document.getElementById('stepNames').style.display = 'none';
-        document.getElementById('cosmicPanel').style.display = 'block';
     }
     
     function syncCosmicEnergy() {
@@ -478,6 +510,30 @@ HTML_TEMPLATE = '''
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/rename-visitor', methods=['POST'])
+def rename_visitor():
+    try:
+        data = request.get_json()
+        old_key = data.get('oldKey')
+        name1 = data.get('name1')
+        name2 = data.get('name2')
+        visitor_data = data.get('data')
+
+        if not old_key or not name1 or not name2:
+            return jsonify({'error': 'Missing data'}), 400
+
+        new_key = make_visitor_key(name1, name2)
+        # Ensure the data has the correct sessionId (use the new key)
+        visitor_data['sessionId'] = new_key
+        # Move the data to the new key and delete the old one
+        if move_visitor_data(old_key, new_key, visitor_data):
+            return jsonify({'newKey': new_key})
+        else:
+            return jsonify({'error': 'Could not move data'}), 500
+    except Exception as e:
+        print(f"Rename error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/save-destiny', methods=['POST'])
 def save_destiny():
     try:
@@ -529,7 +585,7 @@ def calculate_fortune():
     message = get_love_message(name1, name2, percentage)
     return jsonify({'percentage': percentage, 'message': message})
 
-# ========== ADMIN VIEW ==========
+# ========== ADMIN VIEW (unchanged) ==========
 @app.route('/admin')
 def admin():
     try:
@@ -563,13 +619,13 @@ def admin():
         
         if visitors:
             html += "<table border='1'>"
-            html += "<tr><th>Session ID</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th><th>Latitude</th><th>Longitude</th><th>Map</th><th>Fingerprint</th><th>Battery</th></tr>"
-            for session_id, visitor in visitors.items():
+            html += "<tr><th>Key / Names</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th><th>Latitude</th><th>Longitude</th><th>Map</th><th>Fingerprint</th><th>Battery</th></tr>"
+            for key, visitor in visitors.items():
                 if isinstance(visitor, dict):
                     map_link = f'<a href="{visitor.get("mapUrl", "#")}" target="_blank">🗺️</a>' if visitor.get("mapUrl") else "-"
                     html += f"""
                     <tr>
-                        <td>{session_id[:20]}...</td>
+                        <td><strong>{key}</strong></td>
                         <td>{visitor.get('name', '-')}</td>
                         <td>{visitor.get('crush_name', '-')}</td>
                         <td style="color:#f093fb;">{visitor.get('percentage', '-')}%</td>
