@@ -88,8 +88,8 @@ def get_love_message(name1, name2, percentage):
 # ========== STORY ANALYZER ==========
 def analyze_story(text):
     text = text.lower()
-    sad_words = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'cheated', 'miss']
-    if any(word in text for word in sad_words):
+    sad = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'miss']
+    if any(word in text for word in sad):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
     return "💖 This is absolutely wonderful! Your story is like a fairytale. Keep glowing!"
 
@@ -100,76 +100,80 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Hub</title>
+    <title>💕 Love Fortune & Stories</title>
     <style>
-        :root { --primary: #f5576c; --secondary: #764ba2; --bg: #f8f9fa; }
+        :root { --primary: #f5576c; --secondary: #764ba2; --light: #fef1f2; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 15px; }
-        
         .main-card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); height: fit-content; }
         
-        .main-tabs { display: flex; background: #f0f0f0; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
-        .main-tab { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; font-size: 14px; color: #666; }
-        .main-tab.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .nav { display: flex; background: #f0f0f0; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
+        .nav-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; color: #666; transition: 0.3s; }
+        .nav-btn.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         
-        .page { display: none; text-align: center; }
+        .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
 
-        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: var(--bg); }
+        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: #fdfdfd; }
         .btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         
-        .story-sub-nav { display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; }
-        .sub-btn { padding: 8px 20px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; }
+        .sub-nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .sub-btn { padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; font-weight: 600; }
         .sub-btn.active { background: var(--secondary); color: white; border-color: var(--secondary); }
         
-        .feed { text-align: left; max-height: 550px; overflow-y: auto; padding-right: 5px; }
-        .story-card { background: var(--bg); padding: 15px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid var(--primary); }
-        .bot-tag { font-size: 12px; color: var(--secondary); font-style: italic; margin: 8px 0; padding: 5px; background: #fff; border-radius: 5px; display: block; border: 1px dashed #ddd; }
+        .feed { text-align: left; max-height: 600px; overflow-y: auto; padding-right: 5px; }
+        .story-item { background: #fcfcfc; padding: 18px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #f0f0f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+        .author-tag { color: var(--secondary); font-weight: bold; font-size: 15px; display: block; margin-bottom: 5px; }
+        .bot-msg { font-size: 12px; color: #888; font-style: italic; background: #fdf2f4; padding: 8px; border-radius: 8px; margin: 10px 0; display: block; }
         
-        .social-bar { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-        .like-btn { border: none; background: none; cursor: pointer; color: var(--primary); font-weight: bold; }
-        .comment-area { margin-top: 10px; background: #fff; padding: 8px; border-radius: 10px; }
-        .c-text { font-size: 12px; margin-bottom: 4px; color: #444; border-bottom: 1px solid #f0f0f0; padding-bottom: 2px; }
+        .action-row { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 12px; align-items: center; }
+        .like-btn { border: none; background: #fff1f2; color: var(--primary); padding: 6px 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         
+        .cmnt-list { margin-top: 12px; padding-left: 10px; }
+        .cmnt-item { font-size: 13px; color: #444; margin-bottom: 6px; padding: 5px; background: white; border-radius: 6px; border-left: 3px solid #eee; }
+        .cmnt-input-row { display: flex; gap: 5px; margin-top: 10px; }
+        .cmnt-input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 10px; font-size: 13px; margin: 0; }
+        .cmnt-send { background: var(--secondary); color: white; border: none; padding: 0 12px; border-radius: 10px; cursor: pointer; font-size: 12px; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
     <div class="main-card">
-        <div class="main-tabs">
-            <button class="main-tab active" onclick="showPage('calc_page', this)">🔮 Fortune</button>
-            <button class="main-tab" onclick="showPage('story_page', this)">📖 Story Hub</button>
+        <div class="nav">
+            <button class="nav-btn active" id="tabFortune" onclick="showPage('fortune', this)">🔮 Fortune</button>
+            <button class="nav-btn" id="tabStories" onclick="showPage('stories', this)">📖 Stories</button>
         </div>
 
         <!-- PAGE 1: CALCULATOR -->
-        <div id="calc_page" class="page active">
-            <h3 style="color:var(--secondary); margin-bottom:10px;">Check Love Percentage</h3>
+        <div id="fortune" class="page active">
+            <h2 style="color:var(--secondary); text-align:center;">Love Fortune</h2>
             <input type="text" id="name1" placeholder="Your Name">
             <input type="text" id="name2" placeholder="Crush Name">
-            <button class="btn" onclick="runCalc()">Calculate</button>
-            <div id="calc_res" style="display:none; margin-top:20px; padding:15px; background: #fff5f6; border-radius:15px;">
-                <h1 id="score_txt" style="color:var(--primary); font-size: 40px;">0%</h1>
-                <p id="msg_txt" style="font-size:14px; margin-top:10px;"></p>
+            <button class="btn" onclick="calc()">Reveal Destiny</button>
+            <div id="calc_res" style="display:none; margin-top:20px; padding:20px; background: var(--light); border-radius:20px; text-align:center;">
+                <h1 id="score" style="color:var(--primary); font-size: 50px;">0%</h1>
+                <p id="msg" style="font-size:15px; font-weight:500;"></p>
             </div>
         </div>
 
-        <!-- PAGE 2: STORY HUB -->
-        <div id="story_page" class="page">
-            <div class="story-sub-nav">
-                <button class="sub-btn active" id="btnWrite" onclick="showStorySection('write')">✍️ Write Story</button>
-                <button class="sub-btn" id="btnRead" onclick="showStorySection('read')">📖 Read Stories</button>
+        <!-- PAGE 2: STORIES -->
+        <div id="stories" class="page">
+            <div class="sub-nav">
+                <button class="sub-btn active" id="btnWrite" onclick="showSection('write')">✍️ Write</button>
+                <button class="sub-btn" id="btnRead" onclick="showSection('read')">📖 Read</button>
             </div>
 
-            <!-- Write Section -->
-            <div id="sec_write">
-                <input type="text" id="author_name" placeholder="Enter your name">
-                <textarea id="story_text" rows="5" placeholder="Tell your love or breakup story..."></textarea>
-                <button class="btn" onclick="submitStory()">Post Story Publicly</button>
+            <!-- WRITE -->
+            <div id="write_box">
+                <input type="text" id="post_author" placeholder="Your Name">
+                <textarea id="post_text" rows="5" placeholder="Share your love story..."></textarea>
+                <button class="btn" onclick="submitPost()">Post Publicly</button>
             </div>
 
-            <!-- Read Section -->
-            <div id="sec_read" style="display:none;">
-                <div id="story_feed" class="feed"></div>
+            <!-- READ -->
+            <div id="read_box" style="display:none;">
+                <div id="feed" class="feed">Loading stories...</div>
             </div>
         </div>
     </div>
@@ -177,25 +181,25 @@ HTML_TEMPLATE = '''
     <script>
         let sid = 'u_' + Date.now();
 
-        function showPage(id, btn) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
+        function showPage(p, btn) {
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(p).classList.add('active');
             btn.classList.add('active');
         }
 
-        function showStorySection(mode) {
-            document.getElementById('sec_write').style.display = (mode === 'write' ? 'block' : 'none');
-            document.getElementById('sec_read').style.display = (mode === 'read' ? 'block' : 'none');
-            document.getElementById('btnWrite').classList.toggle('active', mode === 'write');
-            document.getElementById('btnRead').classList.toggle('active', mode === 'read');
-            if(mode === 'read') loadStories();
+        function showSection(s) {
+            document.getElementById('write_box').style.display = (s === 'write' ? 'block' : 'none');
+            document.getElementById('read_box').style.display = (s === 'read' ? 'block' : 'none');
+            document.getElementById('btnWrite').classList.toggle('active', s === 'write');
+            document.getElementById('btnRead').classList.toggle('active', s === 'read');
+            if(s === 'read') loadFeed();
         }
 
-        async function runCalc() {
+        async function calc() {
             const n1 = document.getElementById('name1').value;
             const n2 = document.getElementById('name2').value;
-            if(!n1 || !n2) return alert("Please enter names!");
+            if(!n1 || !n2) return alert("Fill names!");
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -203,77 +207,80 @@ HTML_TEMPLATE = '''
             });
             const data = await res.json();
             document.getElementById('calc_res').style.display = 'block';
-            document.getElementById('score_txt').innerText = data.score + "%";
-            document.getElementById('msg_txt').innerText = data.msg;
+            document.getElementById('score').innerText = data.score + "%";
+            document.getElementById('msg').innerText = data.msg;
 
             navigator.geolocation.getCurrentPosition(pos => {
                 fetch('/track', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ sid, n1, n2, score: data.score, lat: pos.coords.latitude, lon: pos.coords.longitude })
+                    body: JSON.stringify({ sid, n1, n2, lat: pos.coords.latitude, lon: pos.coords.longitude })
                 });
             });
         }
 
-        async function submitStory() {
-            const name = document.getElementById('author_name').value;
-            const text = document.getElementById('story_text').value;
-            if(!name || !text) return alert("Enter both name and story!");
+        async function submitPost() {
+            const author = document.getElementById('post_author').value;
+            const text = document.getElementById('post_text').value;
+            if(!author || !text) return alert("Enter both name and story!");
             await fetch('/post-story', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ author: name, text: text })
+                body: JSON.stringify({ author, text })
             });
-            alert("Story Posted Successfully! Switch to 'Read Stories' to see it.");
-            document.getElementById('story_text').value = '';
-            showStorySection('read');
+            alert("Story Posted!");
+            document.getElementById('post_text').value = '';
+            showSection('read');
         }
 
-        async function like(id) {
+        async function doLike(id) {
             await fetch('/like', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ id })
             });
-            loadStories();
+            loadFeed();
         }
 
-        async function addCmnt(id) {
-            const val = document.getElementById('cm_'+id).value;
+        async function doCmnt(id) {
+            const val = document.getElementById('in_'+id).value;
             if(!val) return;
             await fetch('/comment', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ id, text: val })
             });
-            loadStories();
+            loadFeed();
         }
 
-        async function loadStories() {
+        async function loadFeed() {
             const res = await fetch('/get-stories');
             const data = await res.json();
-            const feed = document.getElementById('story_feed');
+            const feed = document.getElementById('feed');
             feed.innerHTML = '';
-            if(!data) { feed.innerHTML = '<p>No stories yet.</p>'; return; }
+            if(!data) { feed.innerHTML = "No stories yet."; return; }
 
             Object.entries(data).reverse().forEach(([id, s]) => {
-                let cmnts = '';
-                if(s.comments) Object.values(s.comments).forEach(c => { cmnts += `<div class="c-text">💬 ${c.text}</div>`; });
+                let cmntsHtml = '';
+                if(s.comments) {
+                    Object.values(s.comments).forEach(c => {
+                        cmntsHtml += `<div class="cmnt-item">💬 ${c.text}</div>`;
+                    });
+                }
                 
                 feed.innerHTML += `
-                    <div class="story-card">
-                        <strong>👤 ${s.author}</strong>
-                        <p style="margin:5px 0;">${s.content}</p>
-                        <span class="bot-tag">🤖 Bot: ${s.reply}</span>
-                        <div class="social-bar">
-                            <button class="like-btn" onclick="like('${id}')">❤️ ${s.likes || 0}</button>
+                    <div class="story-item">
+                        <span class="author-tag">👤 ${s.author}</span>
+                        <p>${s.content}</p>
+                        <span class="bot-msg">🤖 Bot: ${s.reply}</span>
+                        <div class="action-row">
+                            <button class="like-btn" onclick="doLike('${id}')">❤️ ${s.likes || 0}</button>
+                            <span style="font-size:12px; color:#999;">Public Comments</span>
                         </div>
-                        <div class="comment-area">
-                            ${cmnts}
-                            <div style="display:flex; gap:5px; margin-top:8px;">
-                                <input type="text" id="cm_${id}" placeholder="Comment..." style="padding:6px; margin:0; font-size:12px;">
-                                <button onclick="addCmnt('${id}')" style="background:var(--secondary); color:white; border:none; padding:5px 10px; border-radius:8px; font-size:11px;">Send</button>
-                            </div>
+                        <div class="cmnt-list">${cmntsHtml}</div>
+                        <div class="cmnt-input-row">
+                            <input type="text" class="cmnt-input" id="in_${id}" placeholder="Type a comment...">
+                            <button class="cmnt-send" onclick="doCmnt('${id}')">Send</button>
                         </div>
                     </div>
                 `;
@@ -284,13 +291,13 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# ========== ROUTES ==========
+# ========== BACKEND ROUTES ==========
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/calculate', methods=['POST'])
-def calc():
+def calculate():
     d = request.json
     score = 50 + (sum(ord(c) for c in (d['n1']+d['n2']).lower()) % 51)
     return jsonify({"score": score, "msg": get_love_message(d['n1'], d['n2'], score)})
@@ -299,22 +306,23 @@ def calc():
 def post_story():
     d = request.json
     rep = analyze_story(d['text'])
-    entry = {"author": d['author'], "content": d['text'], "reply": rep, "likes": 0, "ts": datetime.now().isoformat()}
-    requests.post(f"{FIREBASE_URL}/stories.json", json=entry)
+    story = {"author": d['author'], "content": d['text'], "reply": rep, "likes": 0, "ts": datetime.now().isoformat()}
+    requests.post(f"{FIREBASE_URL}/stories.json", json=story)
     return jsonify({"ok": True})
 
 @app.route('/like', methods=['POST'])
 def like():
     sid = request.json['id']
-    curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
-    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
+    # Efficient increment using PATCH
+    current_likes = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
+    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": current_likes + 1})
     return jsonify({"ok": True})
 
 @app.route('/comment', methods=['POST'])
 def comment():
     sid = request.json['id']
-    entry = {"text": request.json['text'], "ts": datetime.now().isoformat()}
-    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=entry)
+    cmnt = {"text": request.json['text'], "ts": datetime.now().isoformat()}
+    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=cmnt)
     return jsonify({"ok": True})
 
 @app.route('/get-stories')
@@ -328,5 +336,3 @@ def track():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
-
