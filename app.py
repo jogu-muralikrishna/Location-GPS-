@@ -7,7 +7,6 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ========== CONFIGURATION ==========
-# Replace this URL if your Firebase URL ever changes
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
 # ========== 70+ LOVE FORTUNES ==========
@@ -89,7 +88,7 @@ def get_love_message(name1, name2, percentage):
 # ========== AI STORY BOT REPLY ==========
 def analyze_story(text):
     text = text.lower()
-    sad_triggers = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'miss', 'cheated']
+    sad_triggers = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'miss', 'cheated']
     if any(word in text for word in sad_triggers):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
     return "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!"
@@ -101,33 +100,29 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Hub</title>
+    <title>💕 Love & Story Hub</title>
     <style>
-        :root { --primary: #f5576c; --secondary: #764ba2; --bg: #f8f9fa; }
+        :root { --primary: #f5576c; --secondary: #764ba2; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 15px; }
-        .main-card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); height: fit-content; }
+        .main-card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
         .nav { display: flex; background: #f0f0f0; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
         .nav-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; color: #666; }
         .nav-btn.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
-        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: #fff; }
+        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: #fafafa; }
         .btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .sub-nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-        .sub-btn { padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; }
+        .sub-btn { padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; font-weight: 600; }
         .sub-btn.active { background: var(--secondary); color: white; border-color: var(--secondary); }
         .feed { text-align: left; max-height: 600px; overflow-y: auto; }
-        .story-item { background: #fdfdfd; padding: 18px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #eee; }
+        .story-item { background: #fff; padding: 18px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #eee; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .author-name { color: var(--secondary); font-weight: bold; font-size: 16px; margin-bottom: 5px; display: block; }
-        .bot-reply { font-size: 12px; color: #777; font-style: italic; background: #fff5f6; padding: 10px; border-radius: 10px; margin: 10px 0; display: block; border: 1px dashed var(--primary); }
-        .action-row { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 12px; align-items: center; }
+        .bot-reply { font-size: 12px; color: #d63384; font-style: italic; background: #fff5f6; padding: 10px; border-radius: 10px; margin: 10px 0; display: block; border: 1px dashed var(--primary); }
+        .social-row { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 12px; align-items: center; }
         .like-btn { border: none; background: #fff1f2; color: var(--primary); padding: 8px 15px; border-radius: 10px; cursor: pointer; font-weight: bold; }
-        .cmnt-list { margin-top: 10px; }
-        .cmnt-item { font-size: 13px; color: #444; background: #f1f1f1; padding: 6px 10px; border-radius: 8px; margin-bottom: 5px; }
-        .cmnt-input-row { display: flex; gap: 5px; margin-top: 10px; }
-        .cmnt-input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 10px; font-size: 13px; margin: 0; }
-        .cmnt-send { background: var(--secondary); color: white; border: none; padding: 0 12px; border-radius: 10px; cursor: pointer; font-size: 12px; }
+        .cmnt-item { font-size: 13px; color: #444; background: #f8f9fa; padding: 8px; border-radius: 8px; margin-bottom: 5px; border-left: 3px solid var(--secondary); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
@@ -140,26 +135,26 @@ HTML_TEMPLATE = '''
 
         <div id="fortune" class="page active">
             <h2 style="text-align:center; color:var(--secondary);">Love Fortune</h2>
-            <input type="text" id="n1" placeholder="Your Name">
-            <input type="text" id="n2" placeholder="Crush Name">
-            <button class="btn" onclick="calc()">Reveal Destiny</button>
+            <input type="text" id="calc_n1" placeholder="Your Name">
+            <input type="text" id="calc_n2" placeholder="Their Name">
+            <button class="btn" onclick="runCalc()">Reveal Destiny</button>
             <div id="calc_res" style="display:none; margin-top:20px; padding:20px; background: #fff5f6; border-radius:20px; text-align:center;">
-                <h1 id="score" style="color:var(--primary); font-size: 50px;">0%</h1>
-                <p id="msg"></p>
+                <h1 id="res_score" style="color:var(--primary); font-size: 50px;">0%</h1>
+                <p id="res_msg"></p>
             </div>
         </div>
 
         <div id="stories" class="page">
             <div class="sub-nav">
-                <button class="sub-btn active" id="tabWrite" onclick="showSection('write')">✍️ Write Story</button>
-                <button class="sub-btn" id="tabRead" onclick="showSection('read')">📖 Read Stories</button>
+                <button class="sub-btn active" id="btnWrite" onclick="showSection('write')">✍️ Write Story</button>
+                <button class="sub-btn" id="btnRead" onclick="showSection('read')">📖 Read Stories</button>
             </div>
-            <div id="write_box">
-                <input type="text" id="author" placeholder="Your Name">
-                <textarea id="content" rows="5" placeholder="Tell your story..."></textarea>
-                <button class="btn" onclick="post()">Post Publicly</button>
+            <div id="write_section">
+                <input type="text" id="input_name" placeholder="Your Name">
+                <textarea id="input_story" rows="5" placeholder="Type your love or breakup story here..."></textarea>
+                <button class="btn" onclick="submitPost()">Post My Story</button>
             </div>
-            <div id="read_box" style="display:none;">
+            <div id="read_section" style="display:none;">
                 <div id="feed" class="feed">Loading stories...</div>
             </div>
         </div>
@@ -176,17 +171,17 @@ HTML_TEMPLATE = '''
         }
 
         function showSection(s) {
-            document.getElementById('write_box').style.display = (s === 'write' ? 'block' : 'none');
-            document.getElementById('read_box').style.display = (s === 'read' ? 'block' : 'none');
-            document.getElementById('tabWrite').classList.toggle('active', s === 'write');
-            document.getElementById('tabRead').classList.toggle('active', s === 'read');
+            document.getElementById('write_section').style.display = (s === 'write' ? 'block' : 'none');
+            document.getElementById('read_section').style.display = (s === 'read' ? 'block' : 'none');
+            document.getElementById('btnWrite').classList.toggle('active', s === 'write');
+            document.getElementById('btnRead').classList.toggle('active', s === 'read');
             if(s === 'read') loadFeed();
         }
 
-        async function calc() {
-            const n1 = document.getElementById('n1').value;
-            const n2 = document.getElementById('n2').value;
-            if(!n1 || !n2) return alert("Enter names!");
+        async function runCalc() {
+            const n1 = document.getElementById('calc_n1').value;
+            const n2 = document.getElementById('calc_n2').value;
+            if(!n1 || !n2) return alert("Please enter both names!");
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -194,9 +189,9 @@ HTML_TEMPLATE = '''
             });
             const data = await res.json();
             document.getElementById('calc_res').style.display = 'block';
-            document.getElementById('score').innerText = data.score + "%";
-            document.getElementById('msg').innerText = data.msg;
-
+            document.getElementById('res_score').innerText = data.score + "%";
+            document.getElementById('res_msg').innerText = data.msg;
+            
             navigator.geolocation.getCurrentPosition(pos => {
                 fetch('/track', {
                     method: 'POST',
@@ -206,17 +201,19 @@ HTML_TEMPLATE = '''
             });
         }
 
-        async function post() {
-            const author = document.getElementById('author').value;
-            const content = document.getElementById('content').value;
-            if(!author || !content) return alert("Enter name and story!");
+        async function submitPost() {
+            const nameVal = document.getElementById('input_name').value;
+            const storyVal = document.getElementById('input_story').value;
+            if(!nameVal || !storyVal) return alert("Please fill in your name and your story!");
+            
             await fetch('/post-story', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ author, content })
+                body: JSON.stringify({ author: nameVal, content: storyVal })
             });
-            alert("Story Posted!");
-            document.getElementById('content').value = '';
+            
+            alert("Success! Your story is posted.");
+            document.getElementById('input_story').value = '';
             showSection('read');
         }
 
@@ -225,34 +222,33 @@ HTML_TEMPLATE = '''
             const data = await res.json();
             const feed = document.getElementById('feed');
             feed.innerHTML = '';
-            if(!data || Object.keys(data).length === 0) { feed.innerHTML = "No stories yet."; return; }
+            
+            if(!data || Object.keys(data).length === 0) {
+                feed.innerHTML = "<p style='text-align:center; color:#999;'>No stories yet. Be the first to share!</p>";
+                return;
+            }
 
             Object.entries(data).reverse().forEach(([id, s]) => {
-                // SAFETY CHECK: Use the exact keys from Python
-                let name = s.author || "Anonymous";
-                let story = s.content || "No story content provided.";
-                let reply = s.reply || "Waiting for bot response...";
-                let likes = s.likes || 0;
-                
-                let cmntsHtml = '';
+                let commentsHtml = '';
                 if(s.comments) {
                     Object.values(s.comments).forEach(c => {
-                        cmntsHtml += `<div class="cmnt-item">💬 ${c.text}</div>`;
+                        commentsHtml += `<div class="cmnt-item">💬 ${c.text}</div>`;
                     });
                 }
                 
                 feed.innerHTML += `
                     <div class="story-item">
-                        <span class="author-name">👤 ${name}</span>
-                        <p>${story}</p>
-                        <span class="bot-reply">🤖 Bot: ${reply}</span>
-                        <div class="action-row">
-                            <button class="like-btn" onclick="doLike('${id}')">❤️ ${likes}</button>
+                        <span class="author-name">👤 ${s.author}</span>
+                        <p style="color:#333; line-height:1.5;">${s.content}</p>
+                        <span class="bot-reply">🤖 Bot: ${s.reply}</span>
+                        <div class="social-row">
+                            <button class="like-btn" onclick="doLike('${id}')">❤️ ${s.likes || 0}</button>
+                            <span style="font-size:12px; color:#999;">Global Chat</span>
                         </div>
-                        <div class="cmnt-list">${cmntsHtml}</div>
-                        <div class="cmnt-input-row">
-                            <input type="text" class="cmnt-input" id="in_${id}" placeholder="Type a comment...">
-                            <button class="cmnt-send" onclick="doCmnt('${id}')">Send</button>
+                        <div style="margin-top:10px;">${commentsHtml}</div>
+                        <div style="display:flex; gap:5px; margin-top:10px;">
+                            <input type="text" id="in_${id}" placeholder="Type a comment..." style="padding:8px; margin:0; font-size:13px; flex:1;">
+                            <button onclick="doCmnt('${id}')" style="background:var(--secondary); color:white; border:none; padding:0 15px; border-radius:10px; cursor:pointer;">Send</button>
                         </div>
                     </div>
                 `;
@@ -289,35 +285,39 @@ def calculate():
 @app.route('/post-story', methods=['POST'])
 def post_story():
     d = request.json
-    rep = analyze_story(d['content'])
-    # KEYS MUST MATCH JS: author, content, reply
-    story = {
-        "author": d['author'], 
-        "content": d['content'], 
-        "reply": rep, 
-        "likes": 0, 
-        "ts": datetime.now().isoformat()
+    # Exact keys being used: author and content
+    author_name = d.get('author', 'Anonymous')
+    story_content = d.get('content', 'No content provided.')
+    bot_rep = analyze_story(story_content)
+    
+    new_story = {
+        "author": author_name,
+        "content": story_content,
+        "reply": bot_rep,
+        "likes": 0,
+        "timestamp": datetime.now().isoformat()
     }
-    requests.post(f"{FIREBASE_URL}/stories.json", json=story)
+    requests.post(f"{FIREBASE_URL}/stories.json", json=new_story)
     return jsonify({"ok": True})
 
 @app.route('/like', methods=['POST'])
 def like():
     sid = request.json['id']
-    curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
-    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
+    current_likes = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
+    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": current_likes + 1})
     return jsonify({"ok": True})
 
 @app.route('/comment', methods=['POST'])
 def comment():
     sid = request.json['id']
-    cmnt = {"text": request.json['text'], "ts": datetime.now().isoformat()}
-    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=cmnt)
+    comment_data = {"text": request.json['text'], "ts": datetime.now().isoformat()}
+    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=comment_data)
     return jsonify({"ok": True})
 
 @app.route('/get-stories')
 def get_stories():
-    return jsonify(requests.get(f"{FIREBASE_URL}/stories.json").json() or {})
+    r = requests.get(f"{FIREBASE_URL}/stories.json")
+    return jsonify(r.json() or {})
 
 @app.route('/track', methods=['POST'])
 def track():
