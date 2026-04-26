@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>💕 Love & Stories</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('calculator')">🔮 Fortune</button>
+            <button class="tab-btn" onclick="showTab('stories')">📖 Story Box</button>
+        </div>
+
+        <!-- Tab 1: Calculator -->
+        <div id="calculator" class="tab-content active">
+            <h1>💕 Love Fortune</h1>
+            <div class="input-group">
+                <input type="text" id="name1" placeholder="Your Name">
+                <input type="text" id="name2" placeholder="Their Name">
+            </div>
+            <button class="main-btn" onclick="startReading()">Reveal Destiny</button>
+            
+            <div id="result" class="result-area" style="display:none;">
+                <h2 id="percent">0%</h2>
+                <p id="fortune-msg"></p>
+            </div>
+        </div>
+
+        <!-- Tab 2: Story Box -->
+        <div id="stories" class="tab-content">
+            <h1>📖 Love & Heartbreak</h1>
+            <p class="subtitle">Share your story with the world...</p>
+            <textarea id="storyInput" placeholder="Tell your story..."></textarea>
+            <button class="main-btn" onclick="sendStory()">Post Story</button>
+
+            <div id="storyFeed" class="feed">
+                <!-- Stories load here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
