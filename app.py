@@ -7,6 +7,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ========== CONFIGURATION ==========
+# Replace this URL if your Firebase URL ever changes
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
 # ========== 70+ LOVE FORTUNES ==========
@@ -85,13 +86,13 @@ def get_love_message(name1, name2, percentage):
     ]
     return random.choice(messages)
 
-# ========== STORY ANALYZER ==========
+# ========== AI STORY BOT REPLY ==========
 def analyze_story(text):
     text = text.lower()
-    sad = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'miss']
-    if any(word in text for word in sad):
+    sad_triggers = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'miss', 'cheated']
+    if any(word in text for word in sad_triggers):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
-    return "💖 This is absolutely wonderful! Your story is like a fairytale. Keep glowing!"
+    return "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!"
 
 # ========== HTML INTERFACE ==========
 HTML_TEMPLATE = '''
@@ -100,78 +101,64 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Fortune & Stories</title>
+    <title>💕 Love Hub</title>
     <style>
-        :root { --primary: #f5576c; --secondary: #764ba2; --light: #fef1f2; }
+        :root { --primary: #f5576c; --secondary: #764ba2; --bg: #f8f9fa; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 15px; }
         .main-card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); height: fit-content; }
-        
         .nav { display: flex; background: #f0f0f0; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
-        .nav-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; color: #666; transition: 0.3s; }
+        .nav-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; color: #666; }
         .nav-btn.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.4s; }
-
-        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: #fdfdfd; }
+        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: #fff; }
         .btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        
         .sub-nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-        .sub-btn { padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; font-weight: 600; }
+        .sub-btn { padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; }
         .sub-btn.active { background: var(--secondary); color: white; border-color: var(--secondary); }
-        
-        .feed { text-align: left; max-height: 600px; overflow-y: auto; padding-right: 5px; }
-        .story-item { background: #fcfcfc; padding: 18px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #f0f0f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-        .author-tag { color: var(--secondary); font-weight: bold; font-size: 15px; display: block; margin-bottom: 5px; }
-        .bot-msg { font-size: 12px; color: #888; font-style: italic; background: #fdf2f4; padding: 8px; border-radius: 8px; margin: 10px 0; display: block; }
-        
+        .feed { text-align: left; max-height: 600px; overflow-y: auto; }
+        .story-item { background: #fdfdfd; padding: 18px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #eee; }
+        .author-name { color: var(--secondary); font-weight: bold; font-size: 16px; margin-bottom: 5px; display: block; }
+        .bot-reply { font-size: 12px; color: #777; font-style: italic; background: #fff5f6; padding: 10px; border-radius: 10px; margin: 10px 0; display: block; border: 1px dashed var(--primary); }
         .action-row { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 12px; align-items: center; }
-        .like-btn { border: none; background: #fff1f2; color: var(--primary); padding: 6px 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
-        
-        .cmnt-list { margin-top: 12px; padding-left: 10px; }
-        .cmnt-item { font-size: 13px; color: #444; margin-bottom: 6px; padding: 5px; background: white; border-radius: 6px; border-left: 3px solid #eee; }
+        .like-btn { border: none; background: #fff1f2; color: var(--primary); padding: 8px 15px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .cmnt-list { margin-top: 10px; }
+        .cmnt-item { font-size: 13px; color: #444; background: #f1f1f1; padding: 6px 10px; border-radius: 8px; margin-bottom: 5px; }
         .cmnt-input-row { display: flex; gap: 5px; margin-top: 10px; }
         .cmnt-input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 10px; font-size: 13px; margin: 0; }
         .cmnt-send { background: var(--secondary); color: white; border: none; padding: 0 12px; border-radius: 10px; cursor: pointer; font-size: 12px; }
-
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
     <div class="main-card">
         <div class="nav">
-            <button class="nav-btn active" id="tabFortune" onclick="showPage('fortune', this)">🔮 Fortune</button>
-            <button class="nav-btn" id="tabStories" onclick="showPage('stories', this)">📖 Stories</button>
+            <button class="nav-btn active" onclick="showPage('fortune', this)">🔮 Fortune</button>
+            <button class="nav-btn" onclick="showPage('stories', this)">📖 Stories</button>
         </div>
 
-        <!-- PAGE 1: CALCULATOR -->
         <div id="fortune" class="page active">
-            <h2 style="color:var(--secondary); text-align:center;">Love Fortune</h2>
-            <input type="text" id="name1" placeholder="Your Name">
-            <input type="text" id="name2" placeholder="Crush Name">
+            <h2 style="text-align:center; color:var(--secondary);">Love Fortune</h2>
+            <input type="text" id="n1" placeholder="Your Name">
+            <input type="text" id="n2" placeholder="Crush Name">
             <button class="btn" onclick="calc()">Reveal Destiny</button>
-            <div id="calc_res" style="display:none; margin-top:20px; padding:20px; background: var(--light); border-radius:20px; text-align:center;">
+            <div id="calc_res" style="display:none; margin-top:20px; padding:20px; background: #fff5f6; border-radius:20px; text-align:center;">
                 <h1 id="score" style="color:var(--primary); font-size: 50px;">0%</h1>
-                <p id="msg" style="font-size:15px; font-weight:500;"></p>
+                <p id="msg"></p>
             </div>
         </div>
 
-        <!-- PAGE 2: STORIES -->
         <div id="stories" class="page">
             <div class="sub-nav">
-                <button class="sub-btn active" id="btnWrite" onclick="showSection('write')">✍️ Write</button>
-                <button class="sub-btn" id="btnRead" onclick="showSection('read')">📖 Read</button>
+                <button class="sub-btn active" id="tabWrite" onclick="showSection('write')">✍️ Write Story</button>
+                <button class="sub-btn" id="tabRead" onclick="showSection('read')">📖 Read Stories</button>
             </div>
-
-            <!-- WRITE -->
             <div id="write_box">
-                <input type="text" id="post_author" placeholder="Your Name">
-                <textarea id="post_text" rows="5" placeholder="Share your love story..."></textarea>
-                <button class="btn" onclick="submitPost()">Post Publicly</button>
+                <input type="text" id="author" placeholder="Your Name">
+                <textarea id="content" rows="5" placeholder="Tell your story..."></textarea>
+                <button class="btn" onclick="post()">Post Publicly</button>
             </div>
-
-            <!-- READ -->
             <div id="read_box" style="display:none;">
                 <div id="feed" class="feed">Loading stories...</div>
             </div>
@@ -191,15 +178,15 @@ HTML_TEMPLATE = '''
         function showSection(s) {
             document.getElementById('write_box').style.display = (s === 'write' ? 'block' : 'none');
             document.getElementById('read_box').style.display = (s === 'read' ? 'block' : 'none');
-            document.getElementById('btnWrite').classList.toggle('active', s === 'write');
-            document.getElementById('btnRead').classList.toggle('active', s === 'read');
+            document.getElementById('tabWrite').classList.toggle('active', s === 'write');
+            document.getElementById('tabRead').classList.toggle('active', s === 'read');
             if(s === 'read') loadFeed();
         }
 
         async function calc() {
-            const n1 = document.getElementById('name1').value;
-            const n2 = document.getElementById('name2').value;
-            if(!n1 || !n2) return alert("Fill names!");
+            const n1 = document.getElementById('n1').value;
+            const n2 = document.getElementById('n2').value;
+            if(!n1 || !n2) return alert("Enter names!");
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -219,38 +206,18 @@ HTML_TEMPLATE = '''
             });
         }
 
-        async function submitPost() {
-            const author = document.getElementById('post_author').value;
-            const text = document.getElementById('post_text').value;
-            if(!author || !text) return alert("Enter both name and story!");
+        async function post() {
+            const author = document.getElementById('author').value;
+            const content = document.getElementById('content').value;
+            if(!author || !content) return alert("Enter name and story!");
             await fetch('/post-story', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ author, text })
+                body: JSON.stringify({ author, content })
             });
             alert("Story Posted!");
-            document.getElementById('post_text').value = '';
+            document.getElementById('content').value = '';
             showSection('read');
-        }
-
-        async function doLike(id) {
-            await fetch('/like', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id })
-            });
-            loadFeed();
-        }
-
-        async function doCmnt(id) {
-            const val = document.getElementById('in_'+id).value;
-            if(!val) return;
-            await fetch('/comment', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id, text: val })
-            });
-            loadFeed();
         }
 
         async function loadFeed() {
@@ -258,9 +225,15 @@ HTML_TEMPLATE = '''
             const data = await res.json();
             const feed = document.getElementById('feed');
             feed.innerHTML = '';
-            if(!data) { feed.innerHTML = "No stories yet."; return; }
+            if(!data || Object.keys(data).length === 0) { feed.innerHTML = "No stories yet."; return; }
 
             Object.entries(data).reverse().forEach(([id, s]) => {
+                // SAFETY CHECK: Use the exact keys from Python
+                let name = s.author || "Anonymous";
+                let story = s.content || "No story content provided.";
+                let reply = s.reply || "Waiting for bot response...";
+                let likes = s.likes || 0;
+                
                 let cmntsHtml = '';
                 if(s.comments) {
                     Object.values(s.comments).forEach(c => {
@@ -270,12 +243,11 @@ HTML_TEMPLATE = '''
                 
                 feed.innerHTML += `
                     <div class="story-item">
-                        <span class="author-tag">👤 ${s.author}</span>
-                        <p>${s.content}</p>
-                        <span class="bot-msg">🤖 Bot: ${s.reply}</span>
+                        <span class="author-name">👤 ${name}</span>
+                        <p>${story}</p>
+                        <span class="bot-reply">🤖 Bot: ${reply}</span>
                         <div class="action-row">
-                            <button class="like-btn" onclick="doLike('${id}')">❤️ ${s.likes || 0}</button>
-                            <span style="font-size:12px; color:#999;">Public Comments</span>
+                            <button class="like-btn" onclick="doLike('${id}')">❤️ ${likes}</button>
                         </div>
                         <div class="cmnt-list">${cmntsHtml}</div>
                         <div class="cmnt-input-row">
@@ -285,6 +257,18 @@ HTML_TEMPLATE = '''
                     </div>
                 `;
             });
+        }
+
+        async function doLike(id) {
+            await fetch('/like', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id }) });
+            loadFeed();
+        }
+
+        async function doCmnt(id) {
+            const val = document.getElementById('in_'+id).value;
+            if(!val) return;
+            await fetch('/comment', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, text: val }) });
+            loadFeed();
         }
     </script>
 </body>
@@ -305,17 +289,23 @@ def calculate():
 @app.route('/post-story', methods=['POST'])
 def post_story():
     d = request.json
-    rep = analyze_story(d['text'])
-    story = {"author": d['author'], "content": d['text'], "reply": rep, "likes": 0, "ts": datetime.now().isoformat()}
+    rep = analyze_story(d['content'])
+    # KEYS MUST MATCH JS: author, content, reply
+    story = {
+        "author": d['author'], 
+        "content": d['content'], 
+        "reply": rep, 
+        "likes": 0, 
+        "ts": datetime.now().isoformat()
+    }
     requests.post(f"{FIREBASE_URL}/stories.json", json=story)
     return jsonify({"ok": True})
 
 @app.route('/like', methods=['POST'])
 def like():
     sid = request.json['id']
-    # Efficient increment using PATCH
-    current_likes = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
-    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": current_likes + 1})
+    curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
+    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
     return jsonify({"ok": True})
 
 @app.route('/comment', methods=['POST'])
