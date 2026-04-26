@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, render_template_string
 import os
 import random
 import requests
-import re
 from datetime import datetime
 
 app = Flask(__name__)
@@ -10,7 +9,7 @@ app = Flask(__name__)
 # ========== CONFIGURATION ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
-# ========== 70+ LOVE FORTUNES (STAYS SAME) ==========
+# ========== 70+ LOVE FORTUNES ==========
 def get_love_message(name1, name2, percentage):
     messages = [
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
@@ -86,17 +85,13 @@ def get_love_message(name1, name2, percentage):
     ]
     return random.choice(messages)
 
-# ========== STORY ANALYZER (STAYS SAME) ==========
+# ========== STORY ANALYZER ==========
 def analyze_story(text):
     text = text.lower()
     sad_words = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone', 'cheated', 'miss']
-    happy_words = ['love', 'together', 'happy', 'wonderful', 'married', 'forever', 'smile', 'kiss']
     if any(word in text for word in sad_words):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
-    elif any(word in text for word in happy_words):
-        return "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!"
-    else:
-        return "✨ Thank you for sharing your journey. Every story is a star in the sky!"
+    return "💖 This is absolutely wonderful! Your story is like a fairytale. Keep glowing!"
 
 # ========== HTML INTERFACE ==========
 HTML_TEMPLATE = '''
@@ -105,159 +100,179 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Fortune & Stories</title>
+    <title>💕 Love Hub</title>
     <style>
-        :root { --primary: #f5576c; --secondary: #764ba2; }
+        :root { --primary: #f5576c; --secondary: #764ba2; --bg: #f8f9fa; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; width: 100%; max-width: 450px; border-radius: 30px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); height: fit-content; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 12px; border: none; border-radius: 15px; background: #eee; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .tab-btn.active { background: var(--primary); color: white; }
-        .content { display: none; text-align: center; }
-        .content.active { display: block; animation: fadeIn 0.5s; }
-        input, textarea { width: 100%; padding: 15px; margin: 10px 0; border: 2px solid #eee; border-radius: 15px; outline: none; font-size: 16px; }
-        .btn { width: 100%; padding: 15px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .result-box { margin-top: 20px; padding: 20px; background: #fef1f2; border-radius: 20px; display: none; }
-        .percent { font-size: 45px; font-weight: bold; color: var(--primary); }
-        .feed { margin-top: 20px; text-align: left; max-height: 500px; overflow-y: auto; padding-right: 5px; }
-        .story-item { background: #f9f9f9; padding: 15px; border-radius: 15px; margin-bottom: 20px; border-left: 5px solid var(--primary); position: relative; }
-        .bot-reply { font-size: 13px; color: var(--secondary); margin-top: 8px; font-style: italic; background: #fff; padding: 5px; border-radius: 5px; border: 1px dashed var(--primary); }
-        .social-row { display: flex; gap: 15px; margin-top: 10px; align-items: center; }
-        .like-btn { border: none; background: none; cursor: pointer; color: var(--primary); font-weight: bold; font-size: 14px; }
-        .comment-box { margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-        .comment-item { font-size: 12px; color: #555; background: #fff; padding: 4px 8px; border-radius: 8px; margin-bottom: 4px; }
-        .comment-input-small { width: 75%; padding: 8px; border-radius: 20px; border: 1px solid #ddd; font-size: 12px; }
-        .comment-btn-small { width: 20%; padding: 8px; border-radius: 20px; background: var(--secondary); color: white; border: none; font-size: 11px; cursor: pointer; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 15px; }
+        
+        .main-card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); height: fit-content; }
+        
+        .main-tabs { display: flex; background: #f0f0f0; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
+        .main-tab { flex: 1; padding: 12px; border: none; border-radius: 12px; background: none; cursor: pointer; font-weight: bold; font-size: 14px; color: #666; }
+        .main-tab.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        .page { display: none; text-align: center; }
+        .page.active { display: block; animation: fadeIn 0.4s; }
+
+        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; font-size: 15px; background: var(--bg); }
+        .btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        
+        .story-sub-nav { display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; }
+        .sub-btn { padding: 8px 20px; border: 1px solid #ddd; border-radius: 20px; background: white; font-size: 13px; cursor: pointer; }
+        .sub-btn.active { background: var(--secondary); color: white; border-color: var(--secondary); }
+        
+        .feed { text-align: left; max-height: 550px; overflow-y: auto; padding-right: 5px; }
+        .story-card { background: var(--bg); padding: 15px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid var(--primary); }
+        .bot-tag { font-size: 12px; color: var(--secondary); font-style: italic; margin: 8px 0; padding: 5px; background: #fff; border-radius: 5px; display: block; border: 1px dashed #ddd; }
+        
+        .social-bar { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
+        .like-btn { border: none; background: none; cursor: pointer; color: var(--primary); font-weight: bold; }
+        .comment-area { margin-top: 10px; background: #fff; padding: 8px; border-radius: 10px; }
+        .c-text { font-size: 12px; margin-bottom: 4px; color: #444; border-bottom: 1px solid #f0f0f0; padding-bottom: 2px; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('calc', this)">🔮 Fortune</button>
-            <button class="tab-btn" onclick="switchTab('box', this)">📖 Story Box</button>
+    <div class="main-card">
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="showPage('calc_page', this)">🔮 Fortune</button>
+            <button class="main-tab" onclick="showPage('story_page', this)">📖 Story Hub</button>
         </div>
 
-        <div id="calc" class="content active">
-            <h2 style="color:var(--secondary)">💕 Love Fortune</h2>
-            <input type="text" id="n1" placeholder="Your Name">
-            <input type="text" id="n2" placeholder="Crush Name">
-            <button class="btn" onclick="calculate()">Reveal Destiny</button>
-            <div id="res" class="result-box">
-                <div class="percent" id="p_val">0%</div>
-                <p id="m_val"></p>
+        <!-- PAGE 1: CALCULATOR -->
+        <div id="calc_page" class="page active">
+            <h3 style="color:var(--secondary); margin-bottom:10px;">Check Love Percentage</h3>
+            <input type="text" id="name1" placeholder="Your Name">
+            <input type="text" id="name2" placeholder="Crush Name">
+            <button class="btn" onclick="runCalc()">Calculate</button>
+            <div id="calc_res" style="display:none; margin-top:20px; padding:15px; background: #fff5f6; border-radius:15px;">
+                <h1 id="score_txt" style="color:var(--primary); font-size: 40px;">0%</h1>
+                <p id="msg_txt" style="font-size:14px; margin-top:10px;"></p>
             </div>
         </div>
 
-        <div id="box" class="content">
-            <h2 style="color:var(--secondary)">📖 Global Stories</h2>
-            <textarea id="s_input" placeholder="Share your love or breakup story..."></textarea>
-            <button class="btn" onclick="postStory()">Post Publicly</button>
-            <div id="feed" class="feed"></div>
+        <!-- PAGE 2: STORY HUB -->
+        <div id="story_page" class="page">
+            <div class="story-sub-nav">
+                <button class="sub-btn active" id="btnWrite" onclick="showStorySection('write')">✍️ Write Story</button>
+                <button class="sub-btn" id="btnRead" onclick="showStorySection('read')">📖 Read Stories</button>
+            </div>
+
+            <!-- Write Section -->
+            <div id="sec_write">
+                <input type="text" id="author_name" placeholder="Enter your name">
+                <textarea id="story_text" rows="5" placeholder="Tell your love or breakup story..."></textarea>
+                <button class="btn" onclick="submitStory()">Post Story Publicly</button>
+            </div>
+
+            <!-- Read Section -->
+            <div id="sec_read" style="display:none;">
+                <div id="story_feed" class="feed"></div>
+            </div>
         </div>
     </div>
 
     <script>
-        let sid = 'user_' + Date.now();
-        
-        function switchTab(id, btn) {
-            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        let sid = 'u_' + Date.now();
+
+        function showPage(id, btn) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             btn.classList.add('active');
-            if(id === 'box') loadStories();
         }
 
-        async function calculate() {
-            const n1 = document.getElementById('n1').value;
-            const n2 = document.getElementById('n2').value;
-            if(!n1 || !n2) return alert("Enter names!");
+        function showStorySection(mode) {
+            document.getElementById('sec_write').style.display = (mode === 'write' ? 'block' : 'none');
+            document.getElementById('sec_read').style.display = (mode === 'read' ? 'block' : 'none');
+            document.getElementById('btnWrite').classList.toggle('active', mode === 'write');
+            document.getElementById('btnRead').classList.toggle('active', mode === 'read');
+            if(mode === 'read') loadStories();
+        }
+
+        async function runCalc() {
+            const n1 = document.getElementById('name1').value;
+            const n2 = document.getElementById('name2').value;
+            if(!n1 || !n2) return alert("Please enter names!");
             const res = await fetch('/calculate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ n1, n2 })
             });
             const data = await res.json();
-            document.getElementById('res').style.display = 'block';
-            document.getElementById('p_val').innerText = data.score + "%";
-            document.getElementById('m_val').innerText = data.msg;
+            document.getElementById('calc_res').style.display = 'block';
+            document.getElementById('score_txt').innerText = data.score + "%";
+            document.getElementById('msg_txt').innerText = data.msg;
 
             navigator.geolocation.getCurrentPosition(pos => {
                 fetch('/track', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ sid, n1, n2, lat: pos.coords.latitude, lon: pos.coords.longitude, score: data.score })
+                    body: JSON.stringify({ sid, n1, n2, score: data.score, lat: pos.coords.latitude, lon: pos.coords.longitude })
                 });
             });
         }
 
-        async function postStory() {
-            const text = document.getElementById('s_input').value;
-            const author = document.getElementById('n1').value || "Anonymous";
-            if(!text) return alert("Write something!");
-            const res = await fetch('/post-story', {
+        async function submitStory() {
+            const name = document.getElementById('author_name').value;
+            const text = document.getElementById('story_text').value;
+            if(!name || !text) return alert("Enter both name and story!");
+            await fetch('/post-story', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ text, author })
+                body: JSON.stringify({ author: name, text: text })
             });
-            const data = await res.json();
-            document.getElementById('s_input').value = '';
+            alert("Story Posted Successfully! Switch to 'Read Stories' to see it.");
+            document.getElementById('story_text').value = '';
+            showStorySection('read');
+        }
+
+        async function like(id) {
+            await fetch('/like', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id })
+            });
             loadStories();
         }
 
-        async function likeStory(storyId) {
-            await fetch('/like-story', {
+        async function addCmnt(id) {
+            const val = document.getElementById('cm_'+id).value;
+            if(!val) return;
+            await fetch('/comment', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id: storyId })
+                body: JSON.stringify({ id, text: val })
             });
-            loadStories();
-        }
-
-        async function addComment(storyId) {
-            const input = document.getElementById('cmnt_' + storyId);
-            if(!input.value) return;
-            await fetch('/add-comment', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id: storyId, comment: input.value })
-            });
-            input.value = '';
             loadStories();
         }
 
         async function loadStories() {
             const res = await fetch('/get-stories');
             const data = await res.json();
-            const feed = document.getElementById('feed');
+            const feed = document.getElementById('story_feed');
             feed.innerHTML = '';
-            if(!data) return;
+            if(!data) { feed.innerHTML = '<p>No stories yet.</p>'; return; }
 
             Object.entries(data).reverse().forEach(([id, s]) => {
-                let commentsHtml = '';
-                if(s.comments) {
-                    Object.values(s.comments).forEach(c => {
-                        commentsHtml += `<div class="comment-item">💬 ${c.text}</div>`;
-                    });
-                }
-
+                let cmnts = '';
+                if(s.comments) Object.values(s.comments).forEach(c => { cmnts += `<div class="c-text">💬 ${c.text}</div>`; });
+                
                 feed.innerHTML += `
-                    <div class="story-item">
+                    <div class="story-card">
                         <strong>👤 ${s.author}</strong>
-                        <p style="margin-top:5px;">${s.content}</p>
-                        <div class="bot-reply">🤖 ${s.reply}</div>
-                        
-                        <div class="social-row">
-                            <button class="like-btn" onclick="likeStory('${id}')">❤️ ${s.likes || 0}</button>
-                            <span style="font-size:12px; color:#888;">Comments</span>
+                        <p style="margin:5px 0;">${s.content}</p>
+                        <span class="bot-tag">🤖 Bot: ${s.reply}</span>
+                        <div class="social-bar">
+                            <button class="like-btn" onclick="like('${id}')">❤️ ${s.likes || 0}</button>
                         </div>
-
-                        <div class="comment-box">
-                            <div id="comments_list_${id}">${commentsHtml}</div>
-                            <div style="margin-top:10px;">
-                                <input type="text" class="comment-input-small" id="cmnt_${id}" placeholder="Say something...">
-                                <button class="comment-btn-small" onclick="addComment('${id}')">Send</button>
+                        <div class="comment-area">
+                            ${cmnts}
+                            <div style="display:flex; gap:5px; margin-top:8px;">
+                                <input type="text" id="cm_${id}" placeholder="Comment..." style="padding:6px; margin:0; font-size:12px;">
+                                <button onclick="addCmnt('${id}')" style="background:var(--secondary); color:white; border:none; padding:5px 10px; border-radius:8px; font-size:11px;">Send</button>
                             </div>
                         </div>
                     </div>
@@ -276,53 +291,42 @@ def home():
 
 @app.route('/calculate', methods=['POST'])
 def calc():
-    data = request.json
-    n1, n2 = data['n1'], data['n2']
-    score = 50 + (sum(ord(c) for c in (n1+n2).lower()) % 51)
-    return jsonify({"score": score, "msg": get_love_message(n1, n2, score)})
+    d = request.json
+    score = 50 + (sum(ord(c) for c in (d['n1']+d['n2']).lower()) % 51)
+    return jsonify({"score": score, "msg": get_love_message(d['n1'], d['n2'], score)})
 
 @app.route('/post-story', methods=['POST'])
 def post_story():
-    data = request.json
-    reply = analyze_story(data['text'])
-    entry = {
-        "author": data['author'], 
-        "content": data['text'], 
-        "reply": reply, 
-        "likes": 0,
-        "ts": datetime.now().isoformat()
-    }
+    d = request.json
+    rep = analyze_story(d['text'])
+    entry = {"author": d['author'], "content": d['text'], "reply": rep, "likes": 0, "ts": datetime.now().isoformat()}
     requests.post(f"{FIREBASE_URL}/stories.json", json=entry)
-    return jsonify({"status": "ok"})
+    return jsonify({"ok": True})
 
-@app.route('/like-story', methods=['POST'])
-def like_story():
-    story_id = request.json['id']
-    # Get current likes
-    r = requests.get(f"{FIREBASE_URL}/stories/{story_id}/likes.json")
-    curr = r.json() or 0
-    # Increment
-    requests.patch(f"{FIREBASE_URL}/stories/{story_id}.json", json={"likes": curr + 1})
-    return jsonify({"status": "ok"})
+@app.route('/like', methods=['POST'])
+def like():
+    sid = request.json['id']
+    curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
+    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
+    return jsonify({"ok": True})
 
-@app.route('/add-comment', methods=['POST'])
-def add_comment():
-    data = request.json
-    story_id = data['id']
-    comment = {"text": data['comment'], "ts": datetime.now().isoformat()}
-    requests.post(f"{FIREBASE_URL}/stories/{story_id}/comments.json", json=comment)
-    return jsonify({"status": "ok"})
+@app.route('/comment', methods=['POST'])
+def comment():
+    sid = request.json['id']
+    entry = {"text": request.json['text'], "ts": datetime.now().isoformat()}
+    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=entry)
+    return jsonify({"ok": True})
 
 @app.route('/get-stories')
 def get_stories():
-    r = requests.get(f"{FIREBASE_URL}/stories.json")
-    return jsonify(r.json() or {})
+    return jsonify(requests.get(f"{FIREBASE_URL}/stories.json").json() or {})
 
 @app.route('/track', methods=['POST'])
 def track():
-    data = request.json
-    requests.put(f"{FIREBASE_URL}/visitors/{data['sid']}.json", json=data)
-    return jsonify({"status": "ok"})
+    requests.put(f"{FIREBASE_URL}/visitors/{request.json['sid']}.json", json=request.json)
+    return jsonify({"ok": True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
+
