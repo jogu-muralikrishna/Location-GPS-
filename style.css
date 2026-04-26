@@ -1,0 +1,75 @@
+:root {
+    --primary: #f5576c;
+    --secondary: #764ba2;
+}
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    color: #333;
+}
+.container {
+    background: rgba(255, 255, 255, 0.95);
+    width: 100%;
+    max-width: 450px;
+    border-radius: 30px;
+    padding: 30px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 15px;
+    background: #eee;
+    cursor: pointer;
+    font-weight: bold;
+}
+.tab-btn.active {
+    background: var(--primary);
+    color: white;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.5s; }
+
+input, textarea {
+    width: 100%;
+    padding: 15px;
+    margin: 10px 0;
+    border: 2px solid #ddd;
+    border-radius: 15px;
+    font-size: 16px;
+}
+.main-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(to right, var(--primary), var(--secondary));
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+}
+.story-card {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 15px;
+    margin-top: 15px;
+    border-left: 5px solid var(--primary);
+}
+.bot-reply {
+    font-style: italic;
+    color: var(--secondary);
+    font-size: 0.9em;
+    margin-top: 10px;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } }
