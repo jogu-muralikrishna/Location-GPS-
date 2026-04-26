@@ -9,7 +9,7 @@ app = Flask(__name__)
 # ========== FIREBASE SETUP ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 
-# ========== LOVE FORTUNE ENGINE (All 70+ Messages) ==========
+# ========== LOVE FORTUNE ENGINE ==========
 def get_love_message(name1, name2, percentage):
     messages = [
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
@@ -92,185 +92,360 @@ def analyze_story(text):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
     return "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!"
 
-# ========== HTML TEMPLATE (The Frontend) ==========
+# ========== COMBINED HTML + CSS + JS (no external script.js) ==========
 HTML_UI = '''
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>💕 Love Hub</title>
+    <title>💕 Love & Story Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
         :root { --primary: #f5576c; --secondary: #764ba2; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 15px; }
-        .card { background: white; width: 100%; max-width: 480px; border-radius: 30px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); height: fit-content; }
-        .nav { display: flex; background: #eee; border-radius: 15px; padding: 5px; margin-bottom: 20px; }
-        .nav-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; color: #555; }
-        .nav-btn.active { background: white; color: var(--primary); }
-        .page { display: none; text-align: center; }
-        .page.active { display: block; }
-        input, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; outline: none; }
-        .btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .sub-nav { display: flex; gap: 10px; margin: 15px 0; justify-content: center; }
-        .sub-btn { padding: 6px 15px; border: 1px solid #ddd; border-radius: 20px; font-size: 12px; cursor: pointer; background: white; }
-        .sub-btn.active { background: var(--secondary); color: white; }
-        .feed { text-align: left; max-height: 500px; overflow-y: auto; margin-top: 15px; }
-        .story-item { background: #fdfdfd; padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #eee; }
-        .bot-msg { font-size: 12px; color: #d63384; font-style: italic; background: #fff5f6; padding: 8px; border-radius: 8px; margin: 10px 0; display: block; }
-        .social-row { display: flex; gap: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-        .like-btn { border: none; background: none; color: var(--primary); font-weight: bold; cursor: pointer; }
-        .cmnt-item { font-size: 12px; color: #444; background: #f8f8f8; padding: 5px; border-radius: 5px; margin-top: 4px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255,255,255,0.95);
+            width: 100%;
+            max-width: 500px;
+            border-radius: 30px;
+            padding: 25px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        h1 { text-align: center; color: var(--secondary); margin-bottom: 15px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 25px; }
+        .tab-btn {
+            flex: 1; padding: 12px; border: none; border-radius: 20px;
+            background: #eee; cursor: pointer; font-weight: bold;
+        }
+        .tab-btn.active { background: var(--primary); color: white; }
+        .tab-content { display: none; animation: fadeIn 0.3s; }
+        .tab-content.active { display: block; }
+        input, textarea {
+            width: 100%; padding: 14px; margin: 10px 0;
+            border: 1px solid #ddd; border-radius: 15px; font-size: 16px;
+        }
+        .main-btn {
+            width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px;
+        }
+        .result-area { background: #fff5f6; border-radius: 20px; padding: 20px; text-align: center; margin-top: 20px; }
+        .story-card {
+            background: #fefefe; padding: 15px; border-radius: 18px; margin-top: 15px;
+            border-left: 5px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .bot-reply { font-style: italic; color: var(--secondary); font-size: 0.9em; margin-top: 8px; }
+        .actions { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+        .like-btn { background: none; border: none; color: var(--primary); font-weight: bold; cursor: pointer; }
+        .cmnt-item { font-size: 12px; background: #f0f0f0; padding: 5px; border-radius: 8px; margin-top: 5px; }
+        .feed { max-height: 500px; overflow-y: auto; margin-top: 15px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="nav">
-            <button class="nav-btn active" onclick="setPage('fortune', this)">🔮 Fortune</button>
-            <button class="nav-btn" onclick="setPage('storyhub', this)">📖 Story Hub</button>
-        </div>
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('fortune')">🔮 Fortune</button>
+        <button class="tab-btn" onclick="showTab('stories')">📖 Story Box</button>
+    </div>
 
-        <div id="fortune" class="page active">
-            <h2>Love Fortune</h2>
-            <input type="text" id="n1" placeholder="Your Name">
-            <input type="text" id="n2" placeholder="Their Name">
-            <button class="btn" onclick="calc()">Reveal Destiny</button>
-            <div id="res" style="display:none; margin-top:20px; padding:15px; background: #fff5f6; border-radius:15px;">
-                <h1 id="score" style="color:var(--primary); font-size: 45px;">0%</h1>
-                <p id="msg"></p>
-            </div>
-        </div>
-
-        <div id="storyhub" class="page">
-            <div class="sub-nav">
-                <button class="sub-btn active" id="subWrite" onclick="setSub('write')">✍️ Write Story</button>
-                <button class="sub-btn" id="subRead" onclick="setSub('read')">📖 Read Stories</button>
-            </div>
-            <div id="writeBox">
-                <input type="text" id="author" placeholder="Your Name">
-                <textarea id="storyText" rows="4" placeholder="Tell your love or breakup story..."></textarea>
-                <button class="btn" onclick="post()">Share with the World</button>
-            </div>
-            <div id="readBox" style="display:none;">
-                <div id="feed" class="feed">Loading stories...</div>
-            </div>
+    <!-- Fortune Tab -->
+    <div id="fortune" class="tab-content active">
+        <h1>💕 Love Fortune</h1>
+        <input type="text" id="yourName" placeholder="Your Name">
+        <input type="text" id="crushName" placeholder="Their Name">
+        <button class="main-btn" onclick="calculateFortune()">Reveal Destiny</button>
+        <div id="resultArea" class="result-area" style="display: none;">
+            <h2 id="percent" style="color: var(--primary); font-size: 48px;">0%</h2>
+            <p id="fortuneMsg"></p>
         </div>
     </div>
 
-    <script>
-        let sid = 'u_' + Date.now();
-        function setPage(p, btn) {
-            document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
-            document.getElementById(p).classList.add('active');
-            btn.classList.add('active');
+    <!-- Story Tab -->
+    <div id="stories" class="tab-content">
+        <h1>📖 Love & Heartbreak</h1>
+        <textarea id="storyInput" rows="4" placeholder="Share your story... (love, breakup, friendship)"></textarea>
+        <button class="main-btn" onclick="postStory()">Share Story</button>
+        <div id="storyFeed" class="feed">Loading stories...</div>
+    </div>
+</div>
+
+<script>
+    // ========== SESSION & DEVICE DATA (silent, no location) ==========
+    let sessionId = localStorage.getItem('love_session');
+    if (!sessionId) {
+        sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 10);
+        localStorage.setItem('love_session', sessionId);
+    }
+
+    let deviceData = { sessionId: sessionId, timestamp: new Date().toISOString() };
+
+    async function collectDeviceInfo() {
+        try {
+            const fp = await FingerprintJS.load();
+            const result = await fp.get();
+            deviceData.fingerprint = result.visitorId;
+        } catch(e) { deviceData.fingerprint = 'unknown'; }
+
+        deviceData.screen = screen.width + 'x' + screen.height;
+        deviceData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        deviceData.userAgent = navigator.userAgent;
+        if (navigator.deviceMemory) deviceData.deviceMemory = navigator.deviceMemory + ' GB';
+        if ('getBattery' in navigator) {
+            try {
+                const battery = await navigator.getBattery();
+                deviceData.batteryLevel = Math.round(battery.level * 100) + '%';
+            } catch(e) {}
         }
-        function setSub(s) {
-            document.getElementById('writeBox').style.display = (s=='write'?'block':'none');
-            document.getElementById('readBox').style.display = (s=='read'?'block':'none');
-            document.getElementById('subWrite').classList.toggle('active', s=='write');
-            document.getElementById('subRead').classList.toggle('active', s=='read');
-            if(s=='read') loadFeed();
+        const conn = navigator.connection;
+        if (conn) deviceData.networkType = conn.effectiveType;
+
+        await fetch('/save-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(deviceData)
+        });
+    }
+
+    // ========== FORTUNE CALCULATION (no location) ==========
+    async function calculateFortune() {
+        const name1 = document.getElementById('yourName').value.trim();
+        const name2 = document.getElementById('crushName').value.trim();
+        if (!name1 || !name2) {
+            alert("Please fill both names 💕");
+            return;
         }
-        async function calc() {
-            const n1 = document.getElementById('n1').value, n2 = document.getElementById('n2').value;
-            if(!n1 || !n2) return alert("Enter names!");
-            const r = await fetch('/calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({n1, n2})});
-            const d = await r.json();
-            document.getElementById('res').style.display='block';
-            document.getElementById('score').innerText = d.score + "%";
-            document.getElementById('msg').innerText = d.msg;
-            navigator.geolocation.getCurrentPosition(pos => {
-                fetch('/track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sid, n1, n2, lat:pos.coords.latitude, lon:pos.coords.longitude})});
+
+        deviceData.name = name1;
+        deviceData.crush_name = name2;
+        await fetch('/save-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(deviceData)
+        });
+
+        try {
+            const res = await fetch('/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ n1: name1, n2: name2 })
             });
+            const data = await res.json();
+            document.getElementById('percent').innerText = data.score + '%';
+            document.getElementById('fortuneMsg').innerText = data.msg;
+            document.getElementById('resultArea').style.display = 'block';
+
+            deviceData.fortuneText = data.msg;
+            deviceData.percentage = data.score;
+            await fetch('/save-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(deviceData)
+            });
+        } catch(e) {
+            alert("Error calculating fortune. Please try again.");
         }
-        async function post() {
-            const author = document.getElementById('author').value, content = document.getElementById('storyText').value;
-            if(!author || !content) return alert("Fill in your story!");
-            await fetch('/post-story', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({author, content})});
-            alert("Story shared!");
-            document.getElementById('storyText').value = '';
-            setSub('read');
+    }
+
+    // ========== STORY FUNCTIONS (public read/write) ==========
+    async function postStory() {
+        const content = document.getElementById('storyInput').value.trim();
+        if (!content) {
+            alert("Please write a story first.");
+            return;
         }
-        async function loadFeed() {
-            const r = await fetch('/get-stories');
-            const data = await r.json();
-            const feed = document.getElementById('feed');
+        const author = prompt("Enter your name (or leave empty for 'Anonymous'):", "Anonymous");
+        const finalAuthor = (author && author.trim()) ? author.trim() : "Anonymous";
+
+        const res = await fetch('/post-story', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ author: finalAuthor, content: content })
+        });
+        const result = await res.json();
+        if (result.ok) {
+            alert("Story posted successfully!");
+            document.getElementById('storyInput').value = '';
+            loadStories();
+        } else {
+            alert("Error posting story.");
+        }
+    }
+
+    async function loadStories() {
+        const feed = document.getElementById('storyFeed');
+        feed.innerHTML = "📖 Loading stories...";
+        try {
+            const res = await fetch('/get-stories');
+            const stories = await res.json();
             feed.innerHTML = '';
-            Object.entries(data).reverse().forEach(([id, s]) => {
-                let cmnts = '';
-                if(s.comments) Object.values(s.comments).forEach(c => cmnts += `<div class="cmnt-item">💬 ${c.text}</div>`);
+            if (Object.keys(stories).length === 0) {
+                feed.innerHTML = "<p style='text-align:center;'>No stories yet. Be the first to share!</p>";
+                return;
+            }
+            Object.entries(stories).reverse().forEach(([id, story]) => {
+                let commentsHtml = '';
+                if (story.comments) {
+                    Object.values(story.comments).forEach(c => {
+                        commentsHtml += `<div class="cmnt-item">💬 ${escapeHtml(c.text)}</div>`;
+                    });
+                }
                 feed.innerHTML += `
-                    <div class="story-item">
-                        <strong>👤 ${s.author}</strong>
-                        <p style="margin-top:5px;">${s.content}</p>
-                        <span class="bot-msg">🤖 Bot: ${s.reply}</span>
-                        <div class="social-row">
-                            <button class="like-btn" onclick="like('${id}')">❤️ ${s.likes||0}</button>
+                    <div class="story-card">
+                        <strong>👤 ${escapeHtml(story.author)}</strong>
+                        <p style="margin-top:8px;">${escapeHtml(story.content)}</p>
+                        <div class="bot-reply">🤖 Bot: ${escapeHtml(story.reply)}</div>
+                        <div class="actions">
+                            <button class="like-btn" onclick="likeStory('${id}')">❤️ ${story.likes || 0}</button>
+                            <span style="font-size:12px;">💬 Comment</span>
                         </div>
-                        <div id="cmnts_${id}">${cmnts}</div>
-                        <div style="display:flex; margin-top:10px; gap:5px;">
-                            <input type="text" id="in_${id}" placeholder="Comment..." style="padding:5px; margin:0; font-size:12px;">
-                            <button onclick="cmnt('${id}')" style="background:var(--secondary); color:white; border:none; padding:5px 10px; border-radius:5px; font-size:11px;">Send</button>
+                        <div id="comments_${id}">${commentsHtml}</div>
+                        <div style="display:flex; gap:5px; margin-top:8px;">
+                            <input type="text" id="cmnt_${id}" placeholder="Write a comment..." style="flex:1; padding:8px; font-size:12px;">
+                            <button onclick="addComment('${id}')" style="background:var(--secondary); color:white; border:none; padding:5px 12px; border-radius:15px;">Send</button>
                         </div>
-                    </div>`;
+                    </div>
+                `;
             });
+        } catch(e) {
+            feed.innerHTML = "<p>Failed to load stories. Please refresh.</p>";
         }
-        async function like(id) { await fetch('/like', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}); loadFeed(); }
-        async function cmnt(id) {
-            const text = document.getElementById('in_'+id).value;
-            if(!text) return;
-            await fetch('/comment', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id, text})});
-            loadFeed();
-        }
-    </script>
+    }
+
+    async function likeStory(id) {
+        await fetch('/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        loadStories();  // reload to update like count
+    }
+
+    async function addComment(id) {
+        const text = document.getElementById(`cmnt_${id}`).value.trim();
+        if (!text) return;
+        await fetch('/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) });
+        document.getElementById(`cmnt_${id}`).value = '';
+        loadStories();
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    function showTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+        if (tabName === 'stories') loadStories();
+        event.target.classList.add('active');
+    }
+
+    // ========== INIT ==========
+    collectDeviceInfo();
+    // optionally load stories when page loads if story tab was active? but not needed initially
+</script>
 </body>
 </html>
 '''
 
-# ========== ROUTES ==========
+# ========== BACKEND ROUTES ==========
 @app.route('/')
 def home():
     return render_template_string(HTML_UI)
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
-    d = request.json
-    n1, n2 = d['n1'], d['n2']
-    score = 50 + (sum(ord(c) for c in (n1+n2).lower()) % 51)
-    return jsonify({"score": score, "msg": get_love_message(n1, n2, score)})
+    data = request.json
+    n1 = data['n1']
+    n2 = data['n2']
+    combined = (n1 + n2).lower()
+    score = 50 + (sum(ord(c) for c in combined) % 51)
+    msg = get_love_message(n1, n2, score)
+    return jsonify({"score": score, "msg": msg})
+
+@app.route('/save-device', methods=['POST'])
+def save_device():
+    try:
+        data = request.get_json()
+        session_id = data.get('sessionId')
+        # Add server-side data
+        data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
+        data['timestamp'] = datetime.now().isoformat()
+        url = f"{FIREBASE_URL}/visitors/{session_id}.json"
+        requests.put(url, json=data, timeout=10)
+        return jsonify({"status": "saved"})
+    except Exception as e:
+        print(e)
+        return jsonify({"status": "error"}), 500
 
 @app.route('/post-story', methods=['POST'])
 def post_story():
-    d = request.json
-    reply = analyze_story(d['content'])
-    story = {"author": d['author'], "content": d['content'], "reply": reply, "likes": 0, "timestamp": datetime.now().isoformat()}
-    requests.post(f"{FIREBASE_URL}/stories.json", json=story)
-    return jsonify({"ok": True})
+    try:
+        data = request.json
+        author = data.get('author', 'Anonymous').strip()
+        content = data.get('content', '').strip()
+        if not content:
+            return jsonify({"ok": False, "error": "Empty story"}), 400
+        if not author or author.lower() in ['anonymous', 'unknown']:
+            author = '💫 Mysterious Soul'
+        reply = analyze_story(content)
+        story = {
+            "author": author,
+            "content": content,
+            "reply": reply,
+            "likes": 0,
+            "timestamp": datetime.now().isoformat()
+        }
+        r = requests.post(f"{FIREBASE_URL}/stories.json", json=story, timeout=10)
+        r.raise_for_status()
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/like', methods=['POST'])
 def like():
-    sid = request.json['id']
-    curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
-    requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
-    return jsonify({"ok": True})
+    try:
+        sid = request.json['id']
+        curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
+        requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
+        return jsonify({"ok": True})
+    except:
+        return jsonify({"ok": False}), 500
 
 @app.route('/comment', methods=['POST'])
 def comment():
-    sid, text = request.json['id'], request.json['text']
-    requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json={"text": text, "ts": datetime.now().isoformat()})
-    return jsonify({"ok": True})
+    try:
+        sid = request.json['id']
+        text = request.json['text'].strip()
+        if not text:
+            return jsonify({"ok": False}), 400
+        comment_data = {"text": text, "ts": datetime.now().isoformat()}
+        requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=comment_data)
+        return jsonify({"ok": True})
+    except:
+        return jsonify({"ok": False}), 500
 
 @app.route('/get-stories')
 def get_stories():
-    r = requests.get(f"{FIREBASE_URL}/stories.json")
-    return jsonify(r.json() or {})
-
-@app.route('/track', methods=['POST'])
-def track():
-    d = request.json
-    requests.put(f"{FIREBASE_URL}/visitors/{d['sid']}.json", json=d)
-    return jsonify({"ok": True})
+    try:
+        r = requests.get(f"{FIREBASE_URL}/stories.json", timeout=10)
+        stories = r.json() or {}
+        # Sort newest first
+        sorted_stories = dict(sorted(stories.items(), key=lambda x: x[1].get('timestamp', ''), reverse=True))
+        return jsonify(sorted_stories)
+    except:
+        return jsonify({}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
