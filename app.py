@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect, url_for
 import os
 import random
 import requests
@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # Change this to a random string
 
 # ========== FIREBASE SETUP ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
@@ -13,82 +14,12 @@ FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 def sanitize_key(text):
     return re.sub(r'[.#$\[\]]', '_', text.strip())
 
-# ========== LOVE FORTUNE ENGINE ==========
+# ========== LOVE FORTUNE ENGINE (same as before) ==========
 def get_love_message(name1, name2, percentage):
-    messages = [
-        f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
-        f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
-        f"💖 {name1} + {name2} = {percentage}% endless affection!",
-        f"🌹 {name1} and {name2} bloom together with {percentage}% love!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!",
-        f"💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!",
-        f"✨ {name1} & {name2} – {percentage}% magical bond!",
-        f"💖 {name1} and {name2} share {percentage}% sweet harmony!",
-        f"🌹 Love between {name1} and {name2} is {percentage}% pure bliss!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!",
-        f"💕 {name1} and {name2} – {percentage}% love that never fades!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!",
-        f"💖 {name1} + {name2} = {percentage}% perfect chemistry!",
-        f"🌹 {name1} and {name2} share {percentage}% romantic energy!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!",
-        f"💕 {name1} and {name2} glow with {percentage}% love light!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% forever feeling!",
-        f"💖 {name1} + {name2} = {percentage}% heart connection!",
-        f"🌹 {name1} and {name2} share {percentage}% sweet romance!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% love harmony!",
-        f"💕 {name1} and {name2} – {percentage}% true love vibes!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% perfect match!",
-        f"💖 {name1} + {name2} = {percentage}% love magic!",
-        f"🌹 {name1} and {name2} share {percentage}% endless charm!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% romantic spark!",
-        f"💕 {name1} and {name2} – {percentage}% heartwarming bond!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% destiny love!",
-        f"💖 {name1} + {name2} = {percentage}% soulful match!",
-        f"🌹 {name1} and {name2} share {percentage}% deep affection!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% love glow!",
-        f"💕 {name1} and {name2} – {percentage}% charming connection!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!",
-        f"💖 {name1} + {name2} = {percentage}% emotional magic!",
-        f"🌹 {name1} and {name2} share {percentage}% tender love!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% loving bond!",
-        f"💕 {name1} and {name2} – {percentage}% golden romance!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% heart glow!",
-        f"💖 {name1} + {name2} = {percentage}% pure affection!",
-        f"🌹 {name1} and {name2} share {percentage}% love rhythm!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!",
-        f"💕 {name1} and {name2} – {percentage}% love spark!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!",
-        f"💖 {name1} + {name2} = {percentage}% love glow!",
-        f"🌹 {name1} and {name2} share {percentage}% romance charm!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% heart magic!",
-        f"💕 {name1} and {name2} – {percentage}% soft love vibes!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!",
-        f"💖 {name1} + {name2} = {percentage}% love warmth!",
-        f"🌹 {name1} and {name2} share {percentage}% gentle romance!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% sweet spark!",
-        f"💕 {name1} and {name2} – {percentage}% romantic glow!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% magical hearts!",
-        f"💖 {name1} + {name2} = {percentage}% love energy!",
-        f"🌹 {name1} and {name2} share {percentage}% passion!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% love charm!",
-        f"💕 {name1} and {name2} – {percentage}% sweet connection!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% heart link!",
-        f"💖 {name1} + {name2} = {percentage}% loving vibes!",
-        f"🌹 {name1} and {name2} share {percentage}% affection!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy match!",
-        f"💕 {name1} and {name2} – {percentage}% warm romance!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% loving destiny!",
-        f"💖 {name1} + {name2} = {percentage}% magical bond!",
-        f"🌹 {name1} and {name2} share {percentage}% heart charm!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!",
-        f"💕 {name1} and {name2} – {percentage}% forever love!",
-        f"✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!",
-        f"💖 {name1} + {name2} = {percentage}% love rhythm!",
-        f"🌹 {name1} and {name2} share {percentage}% dreamy vibes!",
-        f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
-    ]
+    messages = [ ... ]  # (paste your 70+ messages here – same as earlier)
     return random.choice(messages)
 
+# ========== STORY ANALYZER ==========
 def analyze_story(text):
     text = text.lower()
     sad_triggers = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone']
@@ -97,7 +28,183 @@ def analyze_story(text):
     else:
         return ("happy", "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!")
 
-# ========== MAIN APP HTML (with your actual Firebase config) ==========
+# ========== LOGIN PAGE (HTML) ==========
+LOGIN_PAGE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love Hub – Sign in</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .card {
+            background: rgba(255,255,255,0.95);
+            width: 100%;
+            max-width: 400px;
+            border-radius: 30px;
+            padding: 40px 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        h1 { color: #764ba2; margin-bottom: 20px; }
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(to right, #f5576c, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .toggle-link {
+            margin-top: 20px;
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .message { margin-top: 15px; font-size: 14px; }
+        .error { color: #e94560; }
+        .success { color: #2e7d64; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>💕 Love Hub</h1>
+    <div id="loginForm">
+        <input type="text" id="loginUsername" placeholder="Username (e.g., john123)" autocomplete="off">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button onclick="signIn()">Sign in</button>
+        <div class="toggle-link" onclick="showSignup()">Create a new account</div>
+    </div>
+    <div id="signupForm" style="display:none;">
+        <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="off">
+        <input type="password" id="signupPassword" placeholder="Password (min 6 chars)">
+        <button onclick="signUp()">Create Account</button>
+        <div class="toggle-link" onclick="showLogin()">Back to Sign in</div>
+    </div>
+    <div id="messageBox" class="message"></div>
+</div>
+
+<script>
+    // Firebase config (your actual values)
+    const firebaseConfig = {
+        apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
+        authDomain: "love-percentage-dc42b.firebaseapp.com",
+        databaseURL: "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
+        projectId: "love-percentage-dc42b",
+        storageBucket: "love-percentage-dc42b.firebasestorage.app",
+        messagingSenderId: "897497192642",
+        appId: "1:897497192642:web:82981d92bdf982aa4b435b",
+        measurementId: "G-880PQQC5ZT"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    function showSignup() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('signupForm').style.display = 'block';
+        document.getElementById('messageBox').innerHTML = '';
+    }
+    function showLogin() {
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('signupForm').style.display = 'none';
+        document.getElementById('messageBox').innerHTML = '';
+    }
+
+    async function checkUsernameTaken(username) {
+        const snapshot = await db.ref('usernames/' + username).once('value');
+        return snapshot.exists();
+    }
+
+    async function signUp() {
+        const username = document.getElementById('signupUsername').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        if (!username || !password) {
+            showMessage("Please fill both fields.", "error");
+            return;
+        }
+        if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+            showMessage("Username: 3–20 characters, only letters, numbers, underscore.", "error");
+            return;
+        }
+        if (password.length < 6) {
+            showMessage("Password must be at least 6 characters.", "error");
+            return;
+        }
+        const taken = await checkUsernameTaken(username);
+        if (taken) {
+            showMessage("Username already taken. Choose another.", "error");
+            return;
+        }
+
+        const email = username + "@lovehub.com";
+        try {
+            const userCred = await auth.createUserWithEmailAndPassword(email, password);
+            const uid = userCred.user.uid;
+            await db.ref('usernames/' + username).set(uid);
+            await db.ref('userProfiles/' + uid).set({ username, createdAt: Date.now() });
+            localStorage.setItem('love_username', username);
+            showMessage("✅ Account created! You now have an account in Love Hub. Redirecting...", "success");
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1500);
+        } catch(e) {
+            showMessage(e.message, "error");
+        }
+    }
+
+    async function signIn() {
+        const username = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        if (!username || !password) {
+            showMessage("Please fill both fields.", "error");
+            return;
+        }
+        const email = username + "@lovehub.com";
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+            localStorage.setItem('love_username', username);
+            window.location.href = '/';
+        } catch(e) {
+            showMessage("Invalid username or password.", "error");
+        }
+    }
+
+    function showMessage(msg, type) {
+        const box = document.getElementById('messageBox');
+        box.innerHTML = `<div class="${type}">${msg}</div>`;
+        setTimeout(() => { box.innerHTML = ''; }, 3000);
+    }
+</script>
+</body>
+</html>
+'''
+
+# ========== MAIN APP HTML (with user badge and logout) ==========
 MAIN_HTML = '''
 <!DOCTYPE html>
 <html>
@@ -111,96 +218,38 @@ MAIN_HTML = '''
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
+        /* same styles as before – keep them */
         :root { --primary: #f5576c; --secondary: #764ba2; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: 'Segoe UI', sans-serif;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-        }
-        .container {
-            background: rgba(255,255,255,0.95);
-            width: 100%;
-            max-width: 500px;
-            border-radius: 30px;
-            padding: 25px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            position: relative;
-        }
-        .logout-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: #e94560;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-        }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 20px; }
+        .container { background: rgba(255,255,255,0.95); width: 100%; max-width: 500px; border-radius: 30px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); position: relative; }
+        .logout-btn { position: absolute; top: 20px; right: 20px; background: #e94560; color: white; border: none; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; }
         h1 { text-align: center; color: var(--secondary); margin-bottom: 15px; }
         .tabs { display: flex; gap: 10px; margin-bottom: 25px; }
-        .tab-btn {
-            flex: 1; padding: 12px; border: none; border-radius: 20px;
-            background: #eee; cursor: pointer; font-weight: bold;
-        }
+        .tab-btn { flex: 1; padding: 12px; border: none; border-radius: 20px; background: #eee; cursor: pointer; font-weight: bold; }
         .tab-btn.active { background: var(--primary); color: white; }
         .tab-content { display: none; animation: fadeIn 0.3s; }
         .tab-content.active { display: block; }
-        input, textarea {
-            width: 100%; padding: 14px; margin: 10px 0;
-            border: 1px solid #ddd; border-radius: 15px; font-size: 16px;
-        }
-        .main-btn {
-            width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary));
-            color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px;
-        }
+        input, textarea { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 15px; font-size: 16px; }
+        .main-btn { width: 100%; padding: 14px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .result-area { background: #fff5f6; border-radius: 20px; padding: 20px; text-align: center; margin-top: 20px; }
-        .story-card {
-            background: #fefefe; padding: 15px; border-radius: 18px; margin-top: 15px;
-            border-left: 5px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
+        .story-card { background: #fefefe; padding: 15px; border-radius: 18px; margin-top: 15px; border-left: 5px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .bot-reply { font-style: italic; color: var(--secondary); font-size: 0.9em; margin-top: 8px; }
         .actions { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
         .like-btn { background: none; border: none; color: var(--primary); font-weight: bold; cursor: pointer; }
         .cmnt-item { font-size: 12px; background: #f0f0f0; padding: 5px; border-radius: 8px; margin-top: 5px; }
         .feed { max-height: 500px; overflow-y: auto; margin-top: 15px; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .love-card {
-            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #ffdde1 100%);
-            border-radius: 30px;
-            padding: 25px;
-            text-align: center;
-            font-family: 'Segoe UI', cursive;
-            max-width: 400px;
-            margin: 10px auto;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        }
+        .love-card { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #ffdde1 100%); border-radius: 30px; padding: 25px; text-align: center; max-width: 400px; margin: 10px auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
         .love-card h2 { color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
         .love-card .percentage { font-size: 3.5em; font-weight: bold; color: #ff1493; }
         .love-card .names { font-size: 1.8em; font-weight: bold; color: #fff; margin: 15px 0; }
         .love-card .message { font-style: italic; color: #6b4e6e; margin-top: 10px; }
         .share-btn { background: #1da1f2; margin-top: 10px; }
         .story-type-buttons { display: flex; gap: 10px; margin: 15px 0; }
-        .story-type-btn {
-            flex: 1; padding: 10px; border: none; border-radius: 30px;
-            background: #e2e8f0; cursor: pointer; font-weight: bold;
-        }
+        .story-type-btn { flex: 1; padding: 10px; border: none; border-radius: 30px; background: #e2e8f0; cursor: pointer; font-weight: bold; }
         .story-type-btn.active { background: var(--primary); color: white; }
-        .user-info {
-            margin-bottom: 10px;
-            text-align: right;
-            font-size: 13px;
-            color: #555;
-            background: #f0f0f0;
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 30px;
-        }
+        .user-info { margin-bottom: 10px; text-align: right; font-size: 13px; color: #555; background: #f0f0f0; display: inline-block; padding: 4px 12px; border-radius: 30px; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     </style>
 </head>
@@ -215,7 +264,6 @@ MAIN_HTML = '''
         <button class="tab-btn" onclick="showTab('stories')">📖 Story Box</button>
     </div>
 
-    <!-- Fortune Tab -->
     <div id="fortune" class="tab-content active">
         <h1>💕 Love Fortune</h1>
         <input type="text" id="yourName" placeholder="Your Name">
@@ -227,7 +275,6 @@ MAIN_HTML = '''
         </div>
     </div>
 
-    <!-- Story Tab -->
     <div id="stories" class="tab-content">
         <h1>📖 Story Hub</h1>
         <textarea id="storyInput" rows="4" placeholder="Share your story... (love, breakup, friendship)"></textarea>
@@ -241,7 +288,6 @@ MAIN_HTML = '''
 </div>
 
 <script>
-    // ========== YOUR ACTUAL FIREBASE CONFIG ==========
     const firebaseConfig = {
         apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
         authDomain: "love-percentage-dc42b.firebaseapp.com",
@@ -481,169 +527,14 @@ MAIN_HTML = '''
 </html>
 '''
 
-# ========== LOGIN PAGE (username only, with your Firebase config) ==========
-LOGIN_HTML = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Hub – Sign in / Sign up</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: 'Segoe UI', sans-serif;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .card {
-            background: rgba(255,255,255,0.95);
-            width: 100%;
-            max-width: 400px;
-            border-radius: 30px;
-            padding: 40px 30px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            text-align: center;
-        }
-        h1 { color: #764ba2; margin-bottom: 20px; }
-        input {
-            width: 100%;
-            padding: 14px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            font-size: 16px;
-        }
-        button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(to right, #f5576c, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 50px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        .toggle-link {
-            margin-top: 20px;
-            color: #667eea;
-            cursor: pointer;
-            text-decoration: underline;
-        }
-        .error { color: #e94560; margin-top: 10px; font-size: 13px; }
-    </style>
-</head>
-<body>
-<div class="card">
-    <h1>💕 Love Hub</h1>
-    <div id="loginForm">
-        <input type="text" id="loginUsername" placeholder="Username (e.g., john123)" autocomplete="off">
-        <input type="password" id="loginPassword" placeholder="Password">
-        <button onclick="signIn()">Sign in</button>
-        <div class="toggle-link" onclick="showSignup()">Create a new account</div>
-    </div>
-    <div id="signupForm" style="display:none;">
-        <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="off">
-        <input type="password" id="signupPassword" placeholder="Password (min 6 chars)">
-        <button onclick="signUp()">Create Account</button>
-        <div class="toggle-link" onclick="showLogin()">Back to Sign in</div>
-    </div>
-    <div id="message" class="error"></div>
-</div>
-
-<script>
-    // ========== YOUR ACTUAL FIREBASE CONFIG ==========
-    const firebaseConfig = {
-        apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
-        authDomain: "love-percentage-dc42b.firebaseapp.com",
-        databaseURL: "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
-        projectId: "love-percentage-dc42b",
-        storageBucket: "love-percentage-dc42b.firebasestorage.app",
-        messagingSenderId: "897497192642",
-        appId: "1:897497192642:web:82981d92bdf982aa4b435b",
-        measurementId: "G-880PQQC5ZT"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.database();
-
-    function showSignup() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('signupForm').style.display = 'block';
-        document.getElementById('message').innerHTML = '';
-    }
-    function showLogin() {
-        document.getElementById('loginForm').style.display = 'block';
-        document.getElementById('signupForm').style.display = 'none';
-        document.getElementById('message').innerHTML = '';
-    }
-
-    async function checkUsernameTaken(username) {
-        const snapshot = await db.ref('usernames/' + username).once('value');
-        return snapshot.exists();
-    }
-
-    async function signUp() {
-        const username = document.getElementById('signupUsername').value.trim();
-        const password = document.getElementById('signupPassword').value;
-        if (!username || !password) { showError("Please fill both fields."); return; }
-        if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-            showError("Username: 3–20 chars, only letters, numbers, underscore.");
-            return;
-        }
-        if (password.length < 6) { showError("Password must be at least 6 characters."); return; }
-        const taken = await checkUsernameTaken(username);
-        if (taken) { showError("Username already taken. Choose another."); return; }
-
-        const email = username + "@lovehub.com";
-        try {
-            const userCred = await auth.createUserWithEmailAndPassword(email, password);
-            const uid = userCred.user.uid;
-            await db.ref('usernames/' + username).set(uid);
-            await db.ref('userProfiles/' + uid).set({ username, createdAt: Date.now() });
-            localStorage.setItem('love_username', username);
-            window.location.href = '/';
-        } catch(e) { showError(e.message); }
-    }
-
-    async function signIn() {
-        const username = document.getElementById('loginUsername').value.trim();
-        const password = document.getElementById('loginPassword').value;
-        if (!username || !password) { showError("Please fill both fields."); return; }
-        const email = username + "@lovehub.com";
-        try {
-            await auth.signInWithEmailAndPassword(email, password);
-            localStorage.setItem('love_username', username);
-            window.location.href = '/';
-        } catch(e) { showError("Invalid username or password."); }
-    }
-
-    function showError(msg) {
-        const el = document.getElementById('message');
-        el.innerHTML = msg;
-        setTimeout(() => { el.innerHTML = ''; }, 3000);
-    }
-</script>
-</body>
-</html>
-'''
-
-# ========== FLASK ROUTES (unchanged) ==========
+# ========== FLASK BACKEND ROUTES ==========
 @app.route('/')
 def home():
     return render_template_string(MAIN_HTML)
 
 @app.route('/login')
-def login_page():
-    return render_template_string(LOGIN_HTML)
+def login():
+    return render_template_string(LOGIN_PAGE)
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -731,7 +622,7 @@ def get_stories():
     except:
         return jsonify({}), 500
 
-# ========== ADMIN DASHBOARD (password protected) ==========
+# ========== ADMIN PANEL (optional) ==========
 @app.route('/admin-panel', methods=['GET', 'POST'])
 def admin_panel():
     if request.method == 'POST':
@@ -742,43 +633,22 @@ def admin_panel():
             resp = requests.get(f"{FIREBASE_URL}/visitors.json", timeout=10)
             visitors = resp.json() or {}
             if not visitors:
-                return "<h1>📊 No visitor data yet.</h1><a href='/admin-panel'>Back</a>"
-            html = '''
-            <!DOCTYPE html>
-            <html>
-            <head><title>Admin Dashboard</title><style>
-                body{background:#0f172a;color:#e2e8f0;font-family:monospace;padding:20px;}
-                table{background:#1e293b;border-collapse:collapse;width:100%;}
-                th,td{border:1px solid #334155;padding:8px;text-align:left;}
-                th{background:#e94560;color:white;}
-            </style></head>
-            <body><h1>🔐 Visitor Secret Data</h1><div style="overflow-x:auto;"><table><thead><tr>
-            <th>Key</th><th>Name</th><th>Crush</th><th>Love%</th><th>Phone</th><th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th><th>Screen</th><th>Timezone</th><th>IP</th><th>Fortune</th><th>Timestamp</th>
-            </tr></thead><tbody>
-            '''
+                return "<h1>No visitor data yet.</h1>"
+            html = "<html><body><h1>Visitor Data</h1><table border='1'><tr><th>Key</th><th>Name</th><th>Crush</th><th>Love%</th><th>Phone</th><th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th><th>Screen</th><th>Timezone</th><th>IP</th><th>Fortune</th><th>Timestamp</th></tr>"
             for key, v in visitors.items():
                 if isinstance(v, dict):
-                    fp = v.get('fingerprint', '-')[:20]
-                    html += f"<tr><td>{key}</td><td>{v.get('name','-')}</td><td>{v.get('crush_name','-')}</td><td>{v.get('percentage','-')}%</td><td>{v.get('phoneNumber','-')}</td><td>{fp}...</td><td>{v.get('batteryLevel','-')}</td><td>{v.get('deviceMemory','-')}</td><td>{v.get('networkType','-')}</td><td>{v.get('screen','-')}</td><td>{v.get('timezone','-')}</td><td>{v.get('ip','-')}</td><td>{v.get('fortuneText','-')[:40]}</td><td>{v.get('timestamp','-')[:19]}</td></tr>"
-            html += "</tbody></table></div><a href='/admin-panel'>Back</a></body></html>"
+                    html += f"<tr><td>{key}</td><td>{v.get('name','')}</td><td>{v.get('crush_name','')}</td><td>{v.get('percentage','')}</td><td>{v.get('phoneNumber','')}</td><td>{v.get('fingerprint','')[:20]}</td><td>{v.get('batteryLevel','')}</td><td>{v.get('deviceMemory','')}</td><td>{v.get('networkType','')}</td><td>{v.get('screen','')}</td><td>{v.get('timezone','')}</td><td>{v.get('ip','')}</td><td>{v.get('fortuneText','')[:40]}</td><td>{v.get('timestamp','')[:19]}</td></tr>"
+            html += "</table></body></html>"
             return html
         except Exception as e:
             return f"<h1>Error: {e}</h1>"
     return '''
-        <!DOCTYPE html>
-        <html>
-        <head><title>Admin Login</title></head>
-        <body style="background:#0f172a; display:flex; justify-content:center; align-items:center; min-height:100vh;">
-            <div style="background:#1e293b; padding:35px; border-radius:24px; text-align:center;">
-                <h2>🔐 Admin Access</h2>
-                <form method="POST">
-                    <input type="password" name="password" placeholder="Password" style="width:100%; padding:12px; border-radius:12px; margin-bottom:15px;">
-                    <button type="submit" style="background:#3b82f6; color:white; border:none; padding:10px 20px; border-radius:30px; cursor:pointer;">Login</button>
-                </form>
-            </div>
-        </body>
-        </html>
+        <form method="POST">
+            <input type="password" name="password" placeholder="Admin password">
+            <button type="submit">Login</button>
+        </form>
     '''
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+    
