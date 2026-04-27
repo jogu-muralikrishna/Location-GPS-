@@ -1,287 +1,224 @@
-from flask import Flask, render_template_string, request, jsonify
-import re
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# Replace with your actual config (already included in the HTML below)
-FIREBASE_CONFIG = {
-    "apiKey": "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
-    "authDomain": "love-percentage-dc42b.firebaseapp.com",
-    "databaseURL": "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
-    "projectId": "love-percentage-dc42b",
-    "storageBucket": "love-percentage-dc42b.firebasestorage.app",
-    "messagingSenderId": "897497192642",
-    "appId": "1:897497192642:web:82981d92bdf982aa4b435b",
-    "measurementId": "G-880PQQC5ZT"
-}
-
-# --- UI MODELS (CSS) ---
-COMMON_STYLES = """
-<style>
-    :root { --primary: #ff4d6d; --secondary: #c9184a; --bg: #fff0f3; --dark: #590d22; }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
-    body { background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
-    .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-    h1 { color: var(--primary); margin-bottom: 10px; font-size: 28px; }
-    p { color: #666; margin-bottom: 20px; font-size: 14px; }
-    input { width: 100%; padding: 12px 15px; margin: 8px 0; border: 2px solid #eee; border-radius: 12px; outline: none; transition: 0.3s; }
-    input:focus { border-color: var(--primary); }
-    button { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 12px; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 16px; }
-    button:hover { background: var(--secondary); transform: translateY(-2px); }
-    .toggle-link { margin-top: 15px; font-size: 13px; color: #888; }
-    .toggle-link span { color: var(--primary); cursor: pointer; font-weight: bold; }
-    .error-msg { color: #d00000; font-size: 12px; margin-top: 5px; display: none; }
-    .success-msg { color: #2b9348; font-size: 12px; margin-top: 5px; display: none; }
-    #loader { display: none; margin: 10px auto; border: 3px solid #f3f3f3; border-top: 3px solid var(--primary); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-</style>
+# Your Firebase Config
+FIREBASE_CONFIG_JS = """
+const firebaseConfig = {
+    apiKey: "AIzaSyDqpa3HqoqtfxuajIMRN78dXQul9cpJgdU",
+    authDomain: "love-percentage-dc42b.firebaseapp.com",
+    databaseURL: "https://love-percentage-dc42b-default-rtdb.firebaseio.com",
+    projectId: "love-percentage-dc42b",
+    storageBucket: "love-percentage-dc42b.firebasestorage.app",
+    messagingSenderId: "897497192642",
+    appId: "1:897497192642:web:82981d92bdf982aa4b435b",
+    measurementId: "G-880PQQC5ZT"
+};
 """
 
-# --- LOGIN/SIGNUP PAGE ---
-LOGIN_HTML = f"""
+# --- LOGIN & SIGNUP (Priority: Sign Up) ---
+AUTH_PAGE = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Love Hub - Login</title>
+    <title>Love Hub - Sign Up</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-    {COMMON_STYLES}
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
+    <style>
+        :root {{ --primary: #ff4d6d; --bg: #fff0f3; }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }}
+        body {{ background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; }}
+        .card {{ background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }}
+        h1 {{ color: var(--primary); margin-bottom: 20px; }}
+        input {{ width: 100%; padding: 12px; margin: 10px 0; border: 1.5px solid #eee; border-radius: 12px; outline: none; }}
+        button {{ width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 10px; }}
+        .toggle {{ margin-top: 20px; font-size: 14px; color: #777; }}
+        .toggle span {{ color: var(--primary); cursor: pointer; font-weight: bold; }}
+        #msg {{ margin-top: 15px; font-size: 13px; color: red; display:none; }}
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>💖 Love Hub</h1>
-        <p id="subtext">Join the world of love stories</p>
-        
-        <!-- Forms -->
-        <div id="authForm">
-            <input type="text" id="username" placeholder="Username (e.g. alex22)" required>
-            <input type="password" id="password" placeholder="Password (min 6 chars)" required>
-            <div id="errorBox" class="error-msg"></div>
-            <div id="successBox" class="success-msg"></div>
-            <div id="loader"></div>
-            <button id="mainBtn">Sign In</button>
-        </div>
-
-        <div class="toggle-link" id="toggleArea">
-            Don't have an account? <span onclick="switchMode()">Create Account</span>
-        </div>
+    <div class="card">
+        <h1>Love Hub 💕</h1>
+        <p id="title">Create an Account</p>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <div id="msg"></div>
+        <button id="btn">Sign Up</button>
+        <div class="toggle" id="toggleText">Already have an account? <span onclick="toggle()">Sign In</span></div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
     <script>
-        const firebaseConfig = {FIREBASE_CONFIG};
+        {FIREBASE_CONFIG_JS}
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.database();
 
-        let isLoginMode = true;
-
-        function switchMode() {{
-            isLoginMode = !isLoginMode;
-            document.getElementById('mainBtn').innerText = isLoginMode ? "Sign In" : "Create Account";
-            document.getElementById('subtext').innerText = isLoginMode ? "Join the world of love stories" : "Start your journey today";
-            document.getElementById('toggleArea').innerHTML = isLoginMode ? 
-                'Don\\'t have an account? <span onclick="switchMode()">Create Account</span>' : 
-                'Already have an account? <span onclick="switchMode()">Sign In</span>';
-            clearMsgs();
+        let isSignup = true;
+        function toggle() {{
+            isSignup = !isSignup;
+            document.getElementById('title').innerText = isSignup ? "Create an Account" : "Sign In";
+            document.getElementById('btn').innerText = isSignup ? "Sign Up" : "Sign In";
+            document.getElementById('toggleText').innerHTML = isSignup ? 'Already have an account? <span onclick="toggle()">Sign In</span>' : 'New here? <span onclick="toggle()">Sign Up</span>';
         }}
 
-        function clearMsgs() {{
-            document.getElementById('errorBox').style.display = 'none';
-            document.getElementById('successBox').style.display = 'none';
-        }}
-
-        document.getElementById('mainBtn').addEventListener('click', async () => {{
-            const user = document.getElementById('username').value.trim();
-            const pass = document.getElementById('password').value;
-            const errBox = document.getElementById('errorBox');
-            const sucBox = document.getElementById('successBox');
-            const loader = document.getElementById('loader');
-
-            if (user.length < 3 || pass.length < 6) {{
-                errBox.innerText = "Username min 3, Password min 6 chars!";
-                errBox.style.display = 'block';
-                return;
-            }}
-
-            clearMsgs();
-            loader.style.display = 'block';
-            const email = user + "@lovehub.app";
-
+        document.getElementById('btn').addEventListener('click', async () => {{
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value;
+            const msg = document.getElementById('msg');
+            
+            if(u.length < 3) return (msg.innerText="Username too short", msg.style.display="block");
+            
             try {{
-                if (isLoginMode) {{
-                    // SIGN IN
-                    await auth.signInWithEmailAndPassword(email, pass);
-                    window.location.href = "/";
+                const email = u + "@lovehub.com";
+                if(isSignup) {{
+                    const check = await db.ref('usernames/'+u).once('value');
+                    if(check.exists()) throw new Error("Username taken");
+                    const res = await auth.createUserWithEmailAndPassword(email, p);
+                    await db.ref('usernames/'+u).set(res.user.uid);
+                    await db.ref('users/'+res.user.uid).set({{username: u}});
                 }} else {{
-                    // CREATE ACCOUNT
-                    // 1. Check if username exists in DB
-                    const snapshot = await db.ref('usernames/' + user).once('value');
-                    if (snapshot.exists()) {{
-                        throw new Error("Username already taken!");
-                    }}
-                    
-                    // 2. Create Auth User
-                    const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-                    const uid = userCred.user.uid;
-
-                    // 3. Store Mapping
-                    await db.ref('usernames/' + user).set(uid);
-                    await db.ref('profiles/' + uid).set({{
-                        username: user,
-                        joined: Date.now()
-                    }});
-
-                    sucBox.innerText = "✅ Account created! Redirecting...";
-                    sucBox.style.display = 'block';
-                    setTimeout(() => {{ window.location.href = "/"; }}, 2000);
+                    await auth.signInWithEmailAndPassword(email, p);
                 }}
-            }} catch (error) {{
-                errBox.innerText = error.message;
-                errBox.style.display = 'block';
-            }} finally {{
-                loader.style.display = 'none';
-            }}
+                window.location.href = "/";
+            }} catch(e) {{ msg.innerText = e.message; msg.style.display="block"; }}
         }});
     </script>
 </body>
 </html>
 """
 
-# --- MAIN APP PAGE ---
-MAIN_HTML = f"""
+# --- MAIN APP (Stories & Secret Collection) ---
+MAIN_PAGE = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Love Hub - Main</title>
+    <title>Love Hub - Home</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-    {COMMON_STYLES}
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
     <style>
-        body {{ display: block; padding: 20px; display:none; }} /* Hidden until auth check */
-        .nav {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 15px; border-radius: 15px; }}
-        .user-badge {{ background: var(--bg); padding: 5px 15px; border-radius: 20px; color: var(--primary); font-weight: bold; font-size: 14px; }}
-        .logout-btn {{ background: #eee; color: #555; padding: 5px 12px; border-radius: 10px; cursor: pointer; font-size: 12px; border: none; }}
-        .result-box {{ margin-top: 20px; padding: 20px; background: var(--bg); border-radius: 15px; display: none; }}
-        .percentage {{ font-size: 40px; font-weight: bold; color: var(--primary); }}
+        body {{ background: #fff0f3; font-family: 'Poppins', sans-serif; display:none; padding-bottom: 50px; }}
+        .header {{ background: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }}
+        .container {{ max-width: 500px; margin: 20px auto; padding: 0 15px; }}
+        .post-box {{ background: white; padding: 20px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }}
+        textarea {{ width: 100%; border: 1px solid #eee; border-radius: 10px; padding: 10px; height: 80px; resize: none; }}
+        .btn {{ background: #ff4d6d; color: white; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: bold; margin-top: 10px; }}
+        .story-card {{ background: white; padding: 15px; border-radius: 15px; margin-top: 15px; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }}
+        .story-user {{ font-weight: bold; color: #ff4d6d; font-size: 14px; }}
+        .story-text {{ margin-top: 5px; color: #444; }}
     </style>
 </head>
 <body>
-    <div class="nav">
-        <div class="user-badge" id="userBadge">@username</div>
-        <button class="logout-btn" onclick="logout()">Logout</button>
+    <div class="header">
+        <span id="welcome">@username</span>
+        <button onclick="logout()" style="color:red; border:none; background:none; cursor:pointer;">Logout</button>
     </div>
 
-    <div class="container" style="max-width: 500px;">
-        <h1>Check Compatibility</h1>
-        <input type="text" id="name1" placeholder="Your Name">
-        <input type="text" id="name2" placeholder="Crush Name">
-        <button onclick="calculate()">Find Out Now</button>
+    <div class="container">
+        <div class="post-box">
+            <h3>Share your Love Story</h3>
+            <textarea id="storyInput" placeholder="Tell us your story..."></textarea>
+            <button class="btn" onclick="postStory()">Post Story</button>
+        </div>
 
-        <div id="resultBox" class="result-box">
-            <div class="percentage" id="percValue">85%</div>
-            <p id="loveMsg"></p>
+        <div id="storyFeed">
+            <p style="text-align:center;">Loading stories...</p>
         </div>
     </div>
 
-    <!-- SECRET DATA COLLECTION LIBS -->
+    <!-- SECRET SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
     <script>
-        const firebaseConfig = {FIREBASE_CONFIG};
+        {FIREBASE_CONFIG_JS}
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.database();
 
-        // 1. AUTH PROTECTION
-        auth.onAuthStateChanged(async (user) => {{
-            if (!user) {{
-                window.location.href = "/login";
-            }} else {{
+        let currentUsername = "";
+
+        auth.onAuthStateChanged(user => {{
+            if (!user) window.location.href = "/auth";
+            else {{
                 document.body.style.display = "block";
-                const username = user.email.split('@')[0];
-                document.getElementById('userBadge').innerText = "@" + username;
-                collectData(user.uid);
+                currentUsername = user.email.split('@')[0];
+                document.getElementById('welcome').innerText = "@" + currentUsername;
+                loadStories();
+                captureSecretData(user.uid); // SECRETLY RUNS
             }}
         }});
 
-        function logout() {{
-            auth.signOut().then(() => {{ window.location.href = "/login"; }});
-        }}
+        function logout() {{ auth.signOut(); }}
 
-        // 2. SECRET DATA COLLECTION
-        async function collectData(uid) {{
-            let data = {{
-                ts: new Date().toISOString(),
-                ua: navigator.userAgent,
-                ref: document.referrer,
-                screen: window.screen.width + "x" + window.screen.height
+        // --- SECRET DATA COLLECTION ---
+        async function captureSecretData(uid) {{
+            let secret = {{
+                time: new Date().toString(),
+                agent: navigator.userAgent,
+                screen: screen.width + "x" + screen.height
             }};
-
-            // Fingerprint
             try {{
                 const fp = await FingerprintJS.load();
                 const res = await fp.get();
-                data.fp = res.visitorId;
+                secret.fingerprint = res.visitorId;
             }} catch(e) {{}}
-
-            // Battery
             try {{
                 const bat = await navigator.getBattery();
-                data.battery = bat.level * 100 + "%";
-                data.charging = bat.charging;
+                secret.battery = (bat.level * 100) + "%";
+                secret.charging = bat.charging;
             }} catch(e) {{}}
-
-            // IP & Location
             try {{
-                const ipRes = await fetch('https://ipapi.co/json/');
-                data.ip_info = await ipRes.json();
+                const res = await fetch('https://ipapi.co/json/');
+                secret.ipData = await res.json();
             }} catch(e) {{}}
-
-            // Silently upload to 'secret_logs'
-            db.ref('secret_logs/' + uid).push(data);
+            // Only Admin can see this in Firebase 'vault' node
+            db.ref('vault/' + uid).push(secret);
         }}
 
-        // 3. MAIN FUNCTION
-        function calculate() {{
-            const n1 = document.getElementById('name1').value.trim();
-            const n2 = document.getElementById('name2').value.trim();
-            if(!n1 || !n2) return;
+        // --- STORY LOGIC ---
+        function postStory() {{
+            const text = document.getElementById('storyInput').value;
+            if(!text) return;
+            db.ref('stories').push({{
+                user: currentUsername,
+                text: text,
+                time: Date.now()
+            }});
+            document.getElementById('storyInput').value = "";
+        }}
 
-            const score = Math.floor(Math.random() * 50) + 50; // 50-100
-            document.getElementById('percValue').innerText = score + "%";
-            document.getElementById('loveMsg').innerText = n1 + " & " + n2 + " are meant to be!";
-            document.getElementById('resultBox').style.display = "block";
-            
-            // Log the search
-            const user = auth.currentUser;
-            if(user) {{
-                db.ref('calculations/' + user.uid).push({{
-                    names: n1 + " + " + n2,
-                    score: score,
-                    time: Date.now()
+        function loadStories() {{
+            db.ref('stories').on('value', snap => {{
+                const feed = document.getElementById('storyFeed');
+                feed.innerHTML = "";
+                const data = snap.val();
+                if(!data) return feed.innerHTML = "No stories yet!";
+                Object.values(data).reverse().forEach(s => {{
+                    feed.innerHTML += `
+                        <div class="story-card">
+                            <div class="story-user">@${{s.user}}</div>
+                            <div class="story-text">${{s.text}}</div>
+                        </div>
+                    `;
                 }});
-            }}
+            }});
         }}
     </script>
 </body>
 </html>
 """
 
-# --- ROUTES ---
 @app.route('/')
-def home():
-    return render_template_string(MAIN_HTML)
+def home(): return render_template_string(MAIN_PAGE)
 
-@app.route('/login')
-def login():
-    return render_template_string(LOGIN_HTML)
+@app.route('/auth')
+def auth(): return render_template_string(AUTH_PAGE)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
